@@ -15,7 +15,7 @@ import yaml
 
 from src.ingestion.audit_subject_model import train_audit_subject
 from src.ingestion.feature_engineering import engineer_features
-from src.ingestion.synthetic_metadata import generate_metadata
+from src.ingestion.synthetic_metadata import generate_metadata, compute_anomaly_mask
 from src.ingestion.schema import validate_records
 
 ADULT_COLUMNS = [
@@ -69,8 +69,20 @@ def build_normalized_log(df: pd.DataFrame, config: dict) -> list:
         random_state=config["audit_subject_model"]["random_state"],
     )
 
-    features_df = engineer_features(df, predicted_label, confidence)
-    metadata = generate_metadata(len(df), config["synthetic_metadata"])
+    inj_cfg = config["anomaly_injection"]
+    anomaly_mask = compute_anomaly_mask(
+        len(df), inj_cfg["injection_rate"], inj_cfg["random_state"]
+    )
+    metadata = generate_metadata(len(df), config["synthetic_metadata"] | {
+        "rare_auth_methods": inj_cfg["rare_auth_methods"],
+        "normal_hour_range": inj_cfg["normal_hour_range"],
+    }, anomaly_mask)
+
+    features_df = engineer_features(
+        df, predicted_label, confidence, metadata,
+        rare_auth_methods=inj_cfg["rare_auth_methods"],
+        normal_hour_range=tuple(inj_cfg["normal_hour_range"]),
+    )
 
     protected_cols = config["protected_attributes"]
 
@@ -87,6 +99,10 @@ def build_normalized_log(df: pd.DataFrame, config: dict) -> list:
             "true_label": int(true_label[i]),
         }
         records.append(record)
+
+    n_injected = int(anomaly_mask.sum())
+    print(f"[phase1] injected {n_injected} operational anomalies "
+          f"({n_injected / len(df):.1%} of records)")
 
     return records
 

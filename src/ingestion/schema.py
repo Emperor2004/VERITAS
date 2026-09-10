@@ -35,6 +35,12 @@ class NormalizedLogRecord(BaseModel):
     # since a real deployed audit subject would not expose this.
     true_label: Optional[int] = Field(default=None, ge=0, le=1)
 
+    # Ground truth for the DELIBERATELY INJECTED operational anomaly
+    # (see synthetic_metadata.py). Evaluation-only -- phase 2's
+    # IsolationForest must never see this field as an input feature,
+    # only use it afterward to score precision/recall.
+    ground_truth_operational_anomaly: Optional[bool] = Field(default=None)
+
     @field_validator("protected_attributes")
     @classmethod
     def must_include_configured_attributes(cls, v: Dict[str, str]) -> Dict[str, str]:

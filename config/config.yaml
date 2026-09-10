@@ -22,3 +22,14 @@ synthetic_metadata:
   auth_methods: ["password", "sso", "mfa_token", "biometric"]
   timestamp_start: "2026-01-01T00:00:00"
   timestamp_end: "2026-06-30T23:59:59"
+
+anomaly_injection:
+  # Deliberately injects a small, known rate of anomalies so the anomaly
+  # detector has genuine signal to find (rather than uniform Faker noise)
+  # and so detection performance can actually be measured against a
+  # ground-truth label in phase 2. This label MUST NOT be fed into
+  # IsolationForest's feature set -- it exists only for evaluation.
+  injection_rate: 0.03
+  random_state: 7
+  rare_auth_methods: ["legacy_token", "unverified_device"]
+  normal_hour_range: [7, 22]   # 7am-10pm treated as normal operating hours
