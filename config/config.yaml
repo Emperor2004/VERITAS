@@ -1,0 +1,24 @@
+paths:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  synthetic_dir: data/synthetic_logs
+
+dataset:
+  source: uci_adult_income
+  uci_repo_id: 2   # UCI ML Repository ID for the "Adult" dataset
+  local_cache_csv: data/raw/adult_income.csv
+
+audit_subject_model:
+  algorithm: logistic_regression
+  test_size: 0.2
+  random_state: 42
+
+protected_attributes:
+  - sex
+  - race
+
+synthetic_metadata:
+  session_id_prefix: "SESS"
+  auth_methods: ["password", "sso", "mfa_token", "biometric"]
+  timestamp_start: "2026-01-01T00:00:00"
+  timestamp_end: "2026-06-30T23:59:59"
