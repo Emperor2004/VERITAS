@@ -30,9 +30,13 @@ class NormalizedLogRecord(BaseModel):
     predicted_label: int = Field(..., ge=0, le=1)
     prediction_confidence: float = Field(..., ge=0.0, le=1.0)
 
-    # Ground truth, retained for evaluation/debugging only --
-    # NOT to be used by anomaly detection or fairness scanner logic,
-    # since a real deployed audit subject would not expose this.
+    # Ground truth. NOT usable as an input feature for anomaly detection
+    # (that would be label leakage into an unsupervised model). It IS
+    # legitimately required by the fairness scanner's equalized odds
+    # metric, which is defined in terms of true/false positive rate
+    # parity across groups and cannot be computed from predictions alone
+    # -- this mirrors real fairness audits, which use held-out outcome
+    # data for the same reason.
     true_label: Optional[int] = Field(default=None, ge=0, le=1)
 
     # Ground truth for the DELIBERATELY INJECTED operational anomaly

@@ -17,6 +17,10 @@ protected_attributes:
   - sex
   - race
 
+fairness:
+  disparate_impact_ratio_threshold: 0.8   # EEOC Uniform Guidelines -- four-fifths rule
+  min_group_size_warning: 20              # flag groups smaller than this as statistically unstable
+
 synthetic_metadata:
   session_id_prefix: "SESS"
   auth_methods: ["password", "sso", "mfa_token", "biometric"]
@@ -33,3 +37,14 @@ anomaly_injection:
   random_state: 7
   rare_auth_methods: ["legacy_token", "unverified_device"]
   normal_hour_range: [7, 22]   # 7am-10pm treated as normal operating hours
+
+anomaly_detection:
+  isolation_forest:
+    # NOTE: contamination is set to match anomaly_injection.injection_rate
+    # above (0.03). If you change one, change the other -- sklearn does not
+    # read this dynamically from the injection config. In production this
+    # should be lower for a real bank population; kept at 0.03 here to
+    # match what we deliberately injected during ingestion.
+    contamination: 0.03
+    n_estimators: 100
+    random_state: 42
