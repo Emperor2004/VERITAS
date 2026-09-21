@@ -104,7 +104,7 @@ finding_mappings:
     metrics:
       disparate_impact_ratio:
         threshold_source: externally_cited     # EEOC four-fifths rule (0.8) -- ratio is dataset-agnostic, does not need recalibration
-        severity_tier: dynamic                   # resolved per-run: violation if ratio < 0.8, else informational
+        severity_tier: violation                 # enforced pass/fail; crosses -> escalates per severity_tiers.violation
       demographic_parity_difference:
         threshold_source: statistical_permutation_test   # data-driven; see method note below
         severity_tier: dynamic                             # resolved per-run: violation if observed value exceeds the permutation-derived critical value, else informational
