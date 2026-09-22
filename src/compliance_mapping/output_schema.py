@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
-
 VALID_FINDING_TYPES = {"anomaly_finding", "fairness_finding"}
 VALID_SEVERITY_TIERS = {"informational", "violation"}
 
@@ -33,6 +32,7 @@ class MappedFinding:
     controls_applied: List[ControlCitation] = field(default_factory=list)
     trigger_explanation: str = ""           # e.g. "ratio 0.71 < EEOC threshold 0.8"
     source_record_id: Optional[str] = None  # links back to the raw finding for audit trail
+    supporting_evidence: Any = None         # e.g. top_contributing_features, small_group_warning
 
     def __post_init__(self) -> None:
         if self.finding_type not in VALID_FINDING_TYPES:

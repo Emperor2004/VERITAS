@@ -72,21 +72,55 @@ def test_resolve_escalation_rejects_unresolved_dynamic_tier(lookup):
 # ---- Reconciliation -----------------------------------------------------------
 
 def test_reconciler_preserves_two_shapes_without_force_merge():
-    anomaly = [{"record_id": "r1", "anomaly_score": -0.5, "severity_tier": "informational"}]
+    anomaly = [{
+        "record_id": "r1", "anomaly_score": -0.5, "is_anomaly": True,
+        "top_contributing_features": [{"feature": "hour", "z_score": 3.1}],
+    }]
     fairness = [{
-        "protected_attribute": "sex", "metric_name": "disparate_impact_ratio",
-        "observed_value": 0.9, "severity_tier": "informational",
+        "attribute": "sex",
+        "demographic_parity_difference": 0.02, "demographic_parity_violation": False,
+        "disparate_impact_ratio": 0.9, "disparate_impact_violation": False,
+        "equalized_odds_difference": 0.01, "equalized_odds_violation": False,
+        "small_group_warning": [],
     }]
     results = list(reconcile(anomaly, fairness))
-    assert len(results) == 2
     assert results[0]["finding_type"] == "anomaly_finding"
-    assert results[0]["metric_name"] is None
-    assert results[1]["finding_type"] == "fairness_finding"
-    assert results[1]["metric_name"] == "disparate_impact_ratio"
+    assert results[0]["metric_name"] is None          # per-record shape preserved
+    fairness_results = [r for r in results if r["finding_type"] == "fairness_finding"]
+    assert {r["metric_name"] for r in fairness_results} == {
+        "disparate_impact_ratio", "demographic_parity_difference", "equalized_odds_difference"
+    }
+
+
+def test_reconciler_filters_out_non_anomalous_records():
+    anomaly = [
+        {"record_id": "r1", "anomaly_score": -0.1, "is_anomaly": False},
+        {"record_id": "r2", "anomaly_score": 2.4, "is_anomaly": True},
+    ]
+    results = list(reconcile(anomaly, []))
+    assert len(results) == 1
+    assert results[0]["source_record_id"] == "r2"
+
+
+def test_reconciler_unpacks_one_fairness_row_into_three_metric_findings():
+    fairness = [{
+        "attribute": "race",
+        "demographic_parity_difference": 0.15, "demographic_parity_violation": True,
+        "disparate_impact_ratio": 0.71, "disparate_impact_violation": True,
+        "equalized_odds_difference": 0.03, "equalized_odds_violation": False,
+        "small_group_warning": ["Amer-Indian-Eskimo"],
+    }]
+    results = list(reconcile([], fairness))
+    assert len(results) == 3
+    severities = {r["metric_name"]: r["severity_tier"] for r in results}
+    assert severities["demographic_parity_difference"] == "violation"
+    assert severities["disparate_impact_ratio"] == "violation"
+    assert severities["equalized_odds_difference"] == "informational"
+    assert all(r["supporting_evidence"] == ["Amer-Indian-Eskimo"] for r in results)
 
 
 def test_reconciler_fails_loud_on_missing_field():
-    anomaly = [{"record_id": "r1", "anomaly_score": -0.5}]  # missing severity_tier
+    anomaly = [{"record_id": "r1", "anomaly_score": -0.5}]  # missing is_anomaly
     with pytest.raises(ValueError):
         list(reconcile(anomaly, []))
 

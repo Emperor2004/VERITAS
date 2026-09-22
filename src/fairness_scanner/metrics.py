@@ -34,7 +34,11 @@ from fairlearn.metrics import (
     count,
 )
 
-from src.fairness_scanner.thresholds import evaluate_disparate_impact, flag_small_groups
+from src.fairness_scanner.thresholds import (
+    evaluate_disparate_impact,
+    flag_small_groups,
+    permutation_significance_test,
+)
 
 PROTECTED_COL_PREFIX = "protected__"
 
@@ -66,7 +70,13 @@ def build_frame(records: list) -> pd.DataFrame:
 
 
 def compute_fairness_metrics_for_attribute(
-    df: pd.DataFrame, attribute_col: str, eeoc_threshold: float, min_group_size: int
+    df: pd.DataFrame,
+    attribute_col: str,
+    eeoc_threshold: float,
+    min_group_size: int,
+    significance_level: float = 0.05,
+    n_permutations: int = 1000,
+    permutation_random_state: int = 42,
 ) -> dict:
     y_true = df["true_label"]
     y_pred = df["predicted_label"]
@@ -75,6 +85,23 @@ def compute_fairness_metrics_for_attribute(
     dp_diff = demographic_parity_difference(y_true, y_pred, sensitive_features=sensitive)
     dp_ratio = demographic_parity_ratio(y_true, y_pred, sensitive_features=sensitive)
     eo_diff = equalized_odds_difference(y_true, y_pred, sensitive_features=sensitive)
+
+    # disparate_impact_ratio has an external, cited threshold (EEOC 0.8) --
+    # no permutation test needed, it's a direct comparison. demographic
+    # parity difference and equalized odds difference have no such external
+    # number, so their violation decision comes from a permutation test
+    # instead (see thresholds.py for why). Distinct random_state per metric
+    # so the two tests don't share a permutation stream.
+    dp_test = permutation_significance_test(
+        demographic_parity_difference, y_true, y_pred, sensitive, dp_diff,
+        n_permutations=n_permutations, significance_level=significance_level,
+        random_state=permutation_random_state,
+    )
+    eo_test = permutation_significance_test(
+        equalized_odds_difference, y_true, y_pred, sensitive, eo_diff,
+        n_permutations=n_permutations, significance_level=significance_level,
+        random_state=permutation_random_state + 1,
+    )
 
     group_frame = MetricFrame(
         metrics={"selection_rate": selection_rate, "count": count},
@@ -90,11 +117,20 @@ def compute_fairness_metrics_for_attribute(
     return {
         "attribute": attribute_col.replace(PROTECTED_COL_PREFIX, ""),
         "demographic_parity_difference": round(float(dp_diff), 4),
+        "demographic_parity_violation": dp_test["violation"],
+        "demographic_parity_p_value": dp_test["p_value"],
         "disparate_impact_ratio": round(float(dp_ratio), 4),
+        "disparate_impact_violation": evaluate_disparate_impact(dp_ratio, eeoc_threshold),
         "equalized_odds_difference": round(float(eo_diff), 4),
+        "equalized_odds_violation": eo_test["violation"],
+        "equalized_odds_p_value": eo_test["p_value"],
         "group_selection_rates": group_selection_rates,
         "group_sizes": group_sizes,
         "eeoc_four_fifths_threshold": eeoc_threshold,
-        "disparate_impact_violation": evaluate_disparate_impact(dp_ratio, eeoc_threshold),
         "small_group_warning": small_groups,
+        "permutation_test_config": {
+            "n_permutations": n_permutations,
+            "significance_level": significance_level,
+            "random_state": permutation_random_state,
+        },
     }

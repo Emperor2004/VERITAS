@@ -12,13 +12,18 @@ from pydantic import BaseModel
 class FairnessFinding(BaseModel):
     attribute: str
     demographic_parity_difference: float
+    demographic_parity_violation: bool
+    demographic_parity_p_value: float
     disparate_impact_ratio: float
+    disparate_impact_violation: bool
     equalized_odds_difference: float
+    equalized_odds_violation: bool
+    equalized_odds_p_value: float
     group_selection_rates: Dict[str, float]
     group_sizes: Dict[str, int]
     eeoc_four_fifths_threshold: float
-    disparate_impact_violation: bool
     small_group_warning: List[str]
+    permutation_test_config: dict
 
 
 class FairnessScanOutput(BaseModel):

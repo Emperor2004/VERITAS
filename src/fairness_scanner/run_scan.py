@@ -33,6 +33,9 @@ def main():
 
     eeoc_threshold = config["fairness"]["disparate_impact_ratio_threshold"]
     min_group_size = config["fairness"]["min_group_size_warning"]
+    significance_level = config["fairness"].get("significance_level", 0.05)
+    n_permutations = config["fairness"].get("permutations", 1000)
+    permutation_random_state = config["fairness"].get("permutation_random_state", 42)
 
     print("[phase3] loading normalized log...")
     records = load_normalized_log(args.input)
@@ -46,12 +49,25 @@ def main():
 
     findings = []
     for col in protected_cols:
-        finding = compute_fairness_metrics_for_attribute(df, col, eeoc_threshold, min_group_size)
+        finding = compute_fairness_metrics_for_attribute(
+            df, col, eeoc_threshold, min_group_size,
+            significance_level=significance_level,
+            n_permutations=n_permutations,
+            permutation_random_state=permutation_random_state,
+        )
         findings.append(finding)
 
         status = "VIOLATION" if finding["disparate_impact_violation"] else "within threshold"
         print(f"[phase3]   {finding['attribute']}: disparate_impact_ratio="
               f"{finding['disparate_impact_ratio']} ({status}, threshold={eeoc_threshold})")
+        print(f"[phase3]   {finding['attribute']}: demographic_parity_difference="
+              f"{finding['demographic_parity_difference']} "
+              f"({'VIOLATION' if finding['demographic_parity_violation'] else 'not significant'}, "
+              f"p={finding['demographic_parity_p_value']})")
+        print(f"[phase3]   {finding['attribute']}: equalized_odds_difference="
+              f"{finding['equalized_odds_difference']} "
+              f"({'VIOLATION' if finding['equalized_odds_violation'] else 'not significant'}, "
+              f"p={finding['equalized_odds_p_value']})")
         if finding["small_group_warning"]:
             print(f"[phase3]   WARNING: small group(s) for {finding['attribute']}: "
                   f"{finding['small_group_warning']} (n < {min_group_size}) -- "

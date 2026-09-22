@@ -44,16 +44,25 @@ def build_trigger_explanation(finding: Dict[str, Any], lookup: Dict[str, Any]) -
     finding_type = finding["finding_type"]
     value = finding["observed_value"]
     tier = finding["severity_tier"]
+    evidence = finding.get("supporting_evidence") or []
 
     if finding_type == "anomaly_finding":
-        return (
-            f"anomaly_score={value:.4f}, resolved severity={tier} "
-            "(crossing rule applied upstream in anomaly_detection/thresholds.py)"
-        )
+        if evidence:
+            feature_str = ", ".join(f"{f['feature']} (z={f['z_score']:.2f})" for f in evidence)
+        else:
+            feature_str = "no contributing-feature detail available"
+        return f"anomaly_score={value:.4f}, resolved severity={tier}. Top contributing features: {feature_str}."
 
     metric = finding.get("metric_name", "<unknown metric>")
+    caveat = ""
+    if evidence:  # small_group_warning list for fairness findings
+        caveat = (
+            f" CAVEAT: group(s) {evidence} are below the minimum size threshold -- "
+            "this result may be statistically unstable."
+        )
+
     if metric == "disparate_impact_ratio":
-        return f"{metric}={value:.4f} against EEOC four-fifths threshold (0.8) -> {tier}"
+        return f"{metric}={value:.4f} against EEOC four-fifths threshold (0.8) -> {tier}.{caveat}"
     if metric in ("demographic_parity_difference", "equalized_odds_difference"):
-        return f"{metric}={value:.4f}, resolved via permutation significance test upstream -> {tier}"
-    return f"{metric}={value:.4f} -> {tier}"
+        return f"{metric}={value:.4f}, resolved via permutation significance test upstream -> {tier}.{caveat}"
+    return f"{metric}={value:.4f} -> {tier}.{caveat}"

@@ -80,6 +80,7 @@ def map_finding(finding: Dict[str, Any], lookup: Dict[str, Any]) -> MappedFindin
         controls_applied=build_controls_applied(control_keys, lookup),
         trigger_explanation=build_trigger_explanation(finding, lookup),
         source_record_id=finding.get("source_record_id"),
+        supporting_evidence=finding.get("supporting_evidence"),
     )
 
 

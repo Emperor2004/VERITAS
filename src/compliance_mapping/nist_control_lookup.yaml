@@ -112,20 +112,21 @@ finding_mappings:
         threshold_source: statistical_permutation_test
         severity_tier: dynamic
 
-# Method for statistical_permutation_test threshold_source (implemented in
-# src/fairness_scanner/thresholds.py, not this file -- this documents the
-# contract rules_engine.py and thresholds.py must agree on):
+# Method for statistical_permutation_test threshold_source: IMPLEMENTED as
+# permutation_significance_test() in src/fairness_scanner/thresholds.py,
+# wired into metrics.py's compute_fairness_metrics_for_attribute. The
+# violation flag arrives already resolved on the raw fairness finding
+# (demographic_parity_violation / equalized_odds_violation) before this
+# engine ever sees it -- this file's rules_engine.py does not run the test
+# itself; see input_reconciler.py for how the flag becomes severity_tier.
 #   1. Compute the observed metric on real data.
 #   2. Shuffle protected-attribute labels (predictions and true labels fixed),
 #      recompute the metric, repeat `permutations` times -> null distribution.
-#   3. severity_tier = "violation" if observed value exceeds the
-#      (1 - significance_level) percentile of |null distribution|, else
-#      "informational".
-# This removes the fixed-constant problem for these two metrics and requires
-# no recalibration against a new dataset -- it runs against whatever data
-# it's given. It does NOT remove human judgment entirely: significance_level
-# below is a disclosed policy choice (conventional default 0.05), not a
-# data-derived value. Do not present this as judgment-free.
+#   3. violation = observed value exceeds the (1 - significance_level)
+#      percentile of the null distribution (one-tailed; these metrics are
+#      non-negative by construction).
+# significance_level below documents the SAME value read from config.yaml's
+# fairness.significance_level at runtime -- not an independent copy.
 statistical_threshold_config:
   significance_level: 0.05   # policy choice, not derived from data -- disclose this in any audit report
   permutations: 1000

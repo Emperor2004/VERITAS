@@ -20,6 +20,11 @@ protected_attributes:
 fairness:
   disparate_impact_ratio_threshold: 0.8   # EEOC Uniform Guidelines -- four-fifths rule
   min_group_size_warning: 20              # flag groups smaller than this as statistically unstable
+  significance_level: 0.05                # policy choice, not derived from data -- controls false-positive
+                                           # sensitivity for demographic_parity_difference / equalized_odds_difference
+  permutations: 1000                      # null-distribution size for the permutation significance test
+  permutation_random_state: 42            # fixed for reproducibility -- an unseeded permutation test can
+                                           # flip a boundary-case verdict between identical runs on the same data
 
 synthetic_metadata:
   session_id_prefix: "SESS"
