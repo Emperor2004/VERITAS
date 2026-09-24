@@ -16,10 +16,10 @@
 | 1 | Ingestion — dataset load, audit-subject model, feature engineering, anomaly injection, synthetic metadata | ✅ Built & sandbox-tested |
 | 2 | Anomaly Detection — IsolationForest, data-driven threshold selection, explainability, evaluation | ✅ Built & sandbox-tested |
 | 3 | Fairness Scanner — Fairlearn metrics, EEOC four-fifths threshold, permutation-test thresholds for demographic parity/equalized odds, small-group safeguards | ✅ Built & sandbox-tested |
-| 4 | Compliance Mapping Engine (core original contribution) | ✅ Built & sandbox-tested |
+| 4 | Compliance Mapping Engine (core original contribution) | ✅ Built, sandbox-tested, CLI entrypoint added |
 | 5 | Report Generator (PDF/HTML) | ✅ Built & sandbox-tested: HTML built, PDF pending |
 
-Phases 1–3 have been tested against small synthetic stand-in data during development. **None have yet been run against the real, full UCI Adult Income dataset**, and phases 1–4 have never been run together as one pipeline — only phase-by-phase, module-by-module. Do not treat sandbox-passing as equivalent to a validated run — see [§12](#12-known-limitations--open-items).
+Phases 1–5 have been run individually against the full UCI Adult Income dataset (~45K records after missing-value cleanup). Phases 1–5 have also been run sequentially as a complete pipeline (ingestion → anomaly detection → fairness scan → compliance mapping → report generation), producing real output artifacts in `outputs/`. No orchestrator-level automated run exists yet — see [§12](#12-known-limitations--open-items).
 
 ---
 
@@ -98,20 +98,20 @@ VERITAS is built as four decoupled modules connected by fixed, versioned input/o
              └───────────┬──────────────┘
                          ▼  (join — waits on both)
                 ┌────────────────────┐
-                │ Compliance Mapping  │  ★ core contribution — core logic built,
-                │      Engine         │     no CLI entrypoint yet (see §9.4)
+                │ Compliance Mapping  │  ★ core contribution
+                │      Engine         │
                 └─────────┬───────────┘
                           │  mapped_findings.json
                           ▼
                 ┌────────────────────┐
-                │  Report Generator   │  NOT YET BUILT
+                │  Report Generator   │  HTML built; PDF pending
                 └─────────┬───────────┘
                           │
                           ▼
                   audit_report.pdf / .html
 ```
 
-> **Note on the Compliance Mapping Engine:** this is the only module that is original work. Anomaly detection and fairness scanning use existing, well-established libraries (scikit-learn, Fairlearn) as-is, and run independently of each other. The rules-based translation layer — mapping a raw technical finding to a specific NIST AI RMF control ID with a defensible rationale — is what this project actually contributes. Its core logic (reconciliation, severity resolution, control lookup, explainability trace) is built and unit-tested against phases 2–3's real output schemas; it does not yet have a CLI entrypoint or orchestrator wiring, so it has never been run as part of one continuous pipeline execution.
+> **Note on the Compliance Mapping Engine:** this is the only module that is original work. Anomaly detection and fairness scanning use existing, well-established libraries (scikit-learn, Fairlearn) as-is, and run independently of each other. The rules-based translation layer — mapping a raw technical finding to a specific NIST AI RMF control ID with a defensible rationale — is what this project actually contributes. Its core logic (reconciliation, severity resolution, control lookup, explainability trace) is built, unit-tested, and has a CLI entrypoint (`python -m src.compliance_mapping.run_mapping`). Phases 1–5 have been run sequentially against the real dataset; orchestrator wiring is the remaining gap.
 
 ---
 
@@ -157,30 +157,33 @@ veritas/
 │   │   ├── thresholds.py           # EEOC four-fifths violation decision, small-group flagging
 │   │   └── output_schema.py        # fairness_findings.json schema
 │   │
-│   ├── compliance_mapping/         # phase 4 — core logic built; NO CLI entrypoint yet (see §9.4)
+│   ├── compliance_mapping/         # phase 4 — core original contribution
 │   │   ├── __init__.py
 │   │   ├── rules_engine.py         # orchestrates lookup + escalation; load_lookup_table() validates the YAML
 │   │   ├── input_reconciler.py     # filters is_anomaly=True, unpacks one fairness row into 3 metric findings
 │   │   ├── severity_policy.py      # validates severity_tier, resolves MANAGE escalation (does NOT compute severity)
 │   │   ├── nist_control_lookup.yaml
 │   │   ├── explainability_trace.py # attaches matched NIST action text + per-finding trigger explanation
-│   │   └── output_schema.py        # MappedFinding / ControlCitation dataclasses
+│   │   ├── output_schema.py        # MappedFinding / ControlCitation dataclasses
+│   │   └── run_mapping.py          # phase 4 CLI entrypoint — reads both findings files, writes mapped_findings.json
 │   │
-│   ├── report_generator/           # NOT YET BUILT (phase 5)
+│   ├── report_generator/           # phase 5 — HTML report built; PDF pending
 │   │   ├── __init__.py
-│   │   ├── pdf_report.py
-│   │   ├── html_report.py
+│   │   ├── html_report.py          # loads mapped_findings.json, renders via Jinja2 template
+│   │   ├── run_report.py           # phase 5 CLI entrypoint
+│   │   ├── pdf_report.py           # placeholder — PDF export not yet implemented
 │   │   └── templates/
+│   │       └── report_template.html
 │   │
 │   └── orchestrator.py             # NOT YET BUILT — will run stages 2/3 concurrently, then 4, then 5
 │
-├── tests/                          # 58 tests across phases 1–4, all passing — see §11
+├── tests/                          # 66 tests across phases 1–5, all passing — see §11
 │   ├── conftest.py                 # shared fixtures for compliance_mapping tests
 │   ├── test_ingestion.py
 │   ├── test_anomaly_detection.py
 │   ├── test_fairness_scanner.py
 │   ├── test_compliance_mapping.py
-│   └── test_report_generator.py    # still a placeholder — phase 5 doesn't exist yet
+│   └── test_report_generator.py    # load/summarize/render/write tests for the HTML report
 │
 ├── outputs/
 │   ├── logs/                       # anomaly_findings.json, fairness_findings.json land here
@@ -207,8 +210,8 @@ Each module directory is independently runnable and independently testable. No m
 | Synthetic Metadata & Anomaly Injection | `Faker` + `numpy` | Timestamps, session IDs, auth methods, with a deliberately injected known-rate operational anomaly for detector evaluation |
 | Schema Validation | `pydantic` | Fail-loud validation at every module boundary (ingestion output, anomaly findings, fairness findings) |
 | Dataset Access | `ucimlrepo` | Fetches and locally caches UCI Adult Income |
-| Compliance Mapping | Custom rules engine (Python, YAML-driven lookup) | Finding → NIST AI RMF control ID translation — core logic built & unit-tested; no CLI entrypoint yet |
-| Report Generation | `python-docx`, HTML/CSS, PDF export | Structured audit evidence output — not yet built |
+| Compliance Mapping | Custom rules engine (Python, YAML-driven lookup) | Finding → NIST AI RMF control ID translation — core logic built, unit-tested, and CLI-runnable |
+| Report Generation | `python-docx`, HTML/CSS, PDF export | Structured audit evidence output — HTML report built; PDF pending |
 | Dataset | UCI Adult Income | Real classifier predictions and confidence scores |
 | Compliance Reference | NIST AI RMF | Primary framework for control ID mapping |
 | Fairness Threshold Standard | EEOC four-fifths rule (0.8 ratio) | External, defensible fairness threshold — the only threshold in this project with an external citation so far |
@@ -315,11 +318,11 @@ python -m src.anomaly_detection.isolation_forest --input data/processed/normaliz
 # 3. Fairness scan (runs concurrently with step 2)
 python -m src.fairness_scanner.run_scan --input data/processed/normalized_log.json --output outputs/logs/fairness_findings.json
 
-# 4. Compliance mapping — core logic built
+# 4. Compliance mapping
 
 python -m src.compliance_mapping.run_mapping --anomaly-input outputs/logs/anomaly_findings.json --fairness-input outputs/logs/fairness_findings.json --output outputs/logs/mapped_findings.json
 
-# OR
+# OR - with lookup table
 
 python -m src.compliance_mapping.run_mapping --anomaly-input outputs/logs/anomaly_findings.json --fairness-input outputs/logs/fairness_findings.json --lookup src/compliance_mapping/nist_control_lookup.yaml --output outputs/logs/mapped_findings.json
 
@@ -347,7 +350,7 @@ python -m pytest tests/test_report_generator.py -v
 python -m pytest tests/ -q
 ```
 
-`src/orchestrator.py` does not exist yet. When built, it should run stages 2/3 via `concurrent.futures.ProcessPoolExecutor`, call `.result()` on both futures before invoking compliance mapping, and propagate either exception individually rather than letting one silent failure block the join indefinitely. It will also need to give the Compliance Mapping Engine an actual entrypoint to call, since none exists today.
+`src/orchestrator.py` does not exist yet. When built, it should run stages 2/3 via `concurrent.futures.ProcessPoolExecutor`, call `.result()` on both futures before invoking compliance mapping, and propagate either exception individually rather than letting one silent failure block the join indefinitely. It will also need to wire in the Compliance Mapping Engine's CLI entrypoint (`run_mapping.py`) and the Report Generator (`run_report.py`).
 
 ---
 
@@ -384,13 +387,19 @@ The project's original contribution. Everything above uses off-the-shelf librari
 - **`rules_engine.py`** — orchestrator. `load_lookup_table()` validates `nist_control_lookup.yaml`'s internal consistency at load time (every control ID referenced by `finding_mappings` or `severity_tiers` must exist under `controls`) — fails loudly on a malformed table before any finding is processed, not mid-run. `map_finding()` resolves one finding to its primary/secondary control IDs plus any severity-driven escalation.
 - **`explainability_trace.py`** — attaches the *specific* NIST action text matched (not just a bare control ID) and a human-readable trigger explanation per finding, including the anomaly detector's top-contributing-features or the fairness scanner's small-group caveat where relevant. This addresses the explainability-trace gap flagged in CA-1 review (§12).
 - **`nist_control_lookup.yaml`** — static, versioned lookup table. Anomaly findings map to **MEASURE 2.4** (production monitoring — its action text names control-limit/ML-based anomaly monitoring almost literally); fairness findings map to **MEASURE 2.11** (fairness and bias evaluated); both carry a secondary citation to **MAP 5.1** (impact characterization). Severity is a property of the *finding*, not the finding type: any `violation`-tier finding of any kind escalates generically to **MANAGE 1.3** (response planned/documented) and **MANAGE 1.4** (residual risk documented), via a `severity_tiers` table keyed only on the tier name — this is what lets the escalation logic generalize to data the current sandbox testing doesn't exercise, without a code change.
+- **`run_mapping.py`** — CLI entrypoint matching the convention of phases 1–3. Reads both findings files, calls `reconcile()` → `map_finding()`, writes `mapped_findings.json`.
 - **Locked-in design decisions** (see `docs/nist_mapping_reference.md`, not yet written — currently only recorded here and in team notes):
   - Anomaly findings are **informational-only, by design** — they never escalate to MANAGE, because no externally-defensible anomaly-severity cutoff exists (same reasoning as the unjustified injection rate, §12). Manufacturing one just to exercise the MANAGE path would repeat that problem, not solve it.
   - `recalibration_required` is documented directly in the YAML: `protected_attributes`, `fairness.min_group_size_warning`, and `fairness.significance_level` will not transfer correctly to a different (e.g. a sponsoring company's) dataset without human review — this is disclosed proactively, not discovered live during a demo.
 - **What this module deliberately does NOT do:** GOVERN-function coverage. NIST's GOVERN function (organizational accountability, training, documented risk tolerance) cannot be evidenced by a tool inspecting model outputs — it's the deploying organization's responsibility. VERITAS automates evidence generation for MEASURE and produces citations into MAP and MANAGE; it does not, and structurally cannot, automate GOVERN.
 
-### 9.5 Report Generator
-- Will render `mapped_findings.json` into a structured PDF/HTML audit report.
+### 9.5 Report Generator (`src/report_generator/`)
+- Reads `mapped_findings.json` (phase 4 output) and renders a self-contained, static HTML audit report via a Jinja2 template — no external CDN assets or JavaScript required, designed to be portable and diffable.
+- `html_report.py` loads findings, produces a summary (counts by severity tier and finding type, separated violation/informational lists), and renders via `templates/report_template.html`.
+- The report includes an explicit **scope disclosure**: VERITAS covers MEASURE + MAP/MANAGE citations only; GOVERN coverage is the deploying organization's responsibility. This is rendered in every report, not left implicit.
+- `run_report.py` is the CLI entrypoint, matching the convention of phases 1–4.
+- PDF export (`pdf_report.py`) is a placeholder — not yet implemented.
+- Output: `audit_report.html` in `outputs/reports/`.
 
 ---
 
@@ -411,7 +420,7 @@ Everything above is verified by `tests/test_compliance_mapping.py` (see §11) ag
 
 ## 11. Testing
 
-**An automated `pytest` suite exists: 58 tests across all four modules with code, all passing.**
+**An automated `pytest` suite exists: 66 tests across all five modules, all passing.**
 
 ```bash
 python -m pytest tests/ -v      # 66 passed
@@ -423,13 +432,11 @@ python -m pytest tests/ -v      # 66 passed
 | Anomaly Detection | `test_anomaly_detection.py` | Label-leakage guard (`ground_truth_operational_anomaly` / `true_label` must never enter the feature matrix — raises if they do); knee-point threshold determinism and range; grid-search threshold recovery on a manufactured clean separation; evaluation metrics (precision/recall against ground truth); output schema accept/reject |
 | Fairness Scanner | `test_fairness_scanner.py` | EEOC threshold boundary behavior (`<` not `<=`); small-group flagging; fail-loud on missing `true_label`; manufactured disparate-impact detection with known expected ratio; **permutation test**: determinism for a fixed seed, correctly flags a manufactured real disparity, correctly does NOT flag an irrelevant/random sensitive feature, reports a Monte Carlo standard error; output schema accept/reject |
 | Compliance Mapping | `test_compliance_mapping.py` | Happy-path control mapping for both finding types; informational findings never discarded and never escalate; violation findings correctly escalate to MANAGE 1.3/1.4; anomaly findings never escalate (locks in the informational-only design decision); reconciler filters `is_anomaly=False` records out; reconciler unpacks one fairness row into three independent metric findings with correct per-metric severity; every mapped finding carries non-empty matched NIST action text; fail-loud on an unmapped finding type and on a malformed lookup table |
+| Report Generator | `test_report_generator.py` | `load_mapped_findings` fails loudly on wrong JSON key; `summarize` counts by severity tier and finding type correctly; rendered HTML includes both severity sections, GOVERN scope disclosure ("deploying organization"), and handles zero-violation case; end-to-end `write_html_report` file I/O roundtrip |
 
 **What this suite does NOT cover, disclosed rather than assumed away:**
-- **No run against the real, full UCI Adult Income dataset.** Every test above uses small, hand-constructed synthetic data. Phases 1–4 have never executed against the actual ~30K+ row dataset together.
-- **No orchestrator-level integration test.** Each module is tested in isolation; nothing currently runs `ingestion → anomaly_detection → fairness_scanner → compliance_mapping` as one pipeline and asserts on the final `mapped_findings.json`.
-- **Permutation test performance is untested at scale.** 1,000 permutations × 2 metrics × 2 protected attributes against the full dataset's row count has not been timed. It may be fine; it has not been checked.
+- **No orchestrator-level integration test.** Each module is tested in isolation; nothing currently runs the full five-phase pipeline as one automated sequence and asserts on the final output.
 - **No CI wiring.** Tests are run manually (`pytest tests/`), not on push/PR.
-- **`test_report_generator.py` is still an empty placeholder** — phase 5 doesn't exist yet.
 - **MEASURE 2.13** (evaluating the TEVV process's own effectiveness — e.g., confirming the fairness scanner actually detects a known injected disparity and does not false-positive on random data at roughly the stated significance rate) is partially covered by the permutation-test unit tests above, but no end-to-end "does this whole pipeline correctly identify a known-bad classifier" test exists yet.
 
 ---
@@ -444,31 +451,31 @@ python -m pytest tests/ -v      # 66 passed
 | Anomaly injection rate (3%) has no external benchmark | **Unresolved.** Chosen as an internal design parameter, not sourced from an industry anomaly base-rate. | Must be either justified or explicitly labeled as an experimental parameter in any report |
 | Two threshold-selection methods for IsolationForest contamination can disagree substantially | **Resolved as designed, documented as expected behavior, not a bug.** On test data, unsupervised knee-point selected ~10.5% vs supervised grid search's ~3%. This is diagnostic (real numeric outliers exist beyond the injected ones), not an error — but it means the 10.5%-level flagged set has NOT been manually verified for correctness. | Manually inspect non-ground-truth flagged records before citing detector performance |
 | `config/thresholds.yaml` as a separate file (shown in earlier README drafts and repo trees) | **Resolved — was never actually built.** All configuration, including fairness thresholds, lives in a single `config/config.yaml`. | This README previously misrepresented the repo structure; corrected here |
-| No automated test suite | **Resolved.** 58 tests across all four modules with code (§11). Not resolved: no run against the real dataset, no orchestrator-level integration test, no CI wiring — see §11's explicit "not covered" list. | Manual verification no longer needed for unit-level regressions; a real-dataset run and an end-to-end integration test are still open, separate items |
+| No automated test suite | **Resolved.** 66 tests across all five modules (§11). Not resolved: no orchestrator-level integration test, no CI wiring — see §11's explicit "not covered" list. | Manual verification no longer needed for unit-level regressions; an end-to-end orchestrator integration test is still an open item |
 | Prior tech-stack framing implied an "optional LLM assist" path alongside "deterministic rules engine" | **Resolved.** Architecture is stated as deterministic-only throughout this document. | If an LLM-assist path is ever reintroduced, this document and the module diagram must be updated together |
 | Phase 4 was designed against an assumed Phase 2/3 output schema before their real source was reviewed | **Resolved, but worth recording as a process lesson.** `AnomalyFinding` has `is_anomaly: bool`, not a `severity_tier`; Phase 2's findings list includes every record, not just flagged ones; `FairnessFinding` is one row per attribute with all three metrics inline, not per-metric records. `input_reconciler.py` was rewritten against the real schemas after reading the actual source. | Any future module built against an "assumed" contract for an already-built upstream module should be verified against real source before being treated as done |
 | Anomaly findings are permanently `informational` — can never trigger a MANAGE-stage response | **Resolved as an explicit design decision, not a gap.** No externally-defensible anomaly-severity cutoff exists (same reasoning as the unbenchmarked injection rate above); manufacturing one to exercise the MANAGE path would repeat that exact problem. Revisit only if an external anomaly-severity standard is identified. | State this as a deliberate scope boundary if asked, not as an oversight |
 | GOVERN function has zero representation in the codebase | **By design, not a gap.** GOVERN (organizational accountability, training, documented risk tolerance) cannot be evidenced by a tool inspecting model outputs — it is the deploying organization's responsibility. VERITAS's honest scope claim is "automates MEASURE evidence generation, cites into MAP and MANAGE" — not "implements the AI RMF." | Do not claim full RMF coverage in the report or demo |
-| Compliance Mapping Engine has no CLI entrypoint | **Open, newly identified.** `rules_engine.py` / `input_reconciler.py` are library functions, invoked only from tests. There is no `python -m src.compliance_mapping...` command analogous to phases 1–3's entrypoints, and no orchestrator wiring. | Phases 1–4 have never run as one continuous pipeline; this blocks that until built |
-| Permutation test performance at full dataset scale is untested | **Open, newly identified.** 1,000 permutations × 2 metrics × 2 protected attributes has only been timed against small synthetic test fixtures (fast), not the ~30K+ row real dataset. | Benchmark before assuming this is fast enough for a live demo |
+| Compliance Mapping Engine has no CLI entrypoint | **Resolved.** `run_mapping.py` provides a CLI entrypoint (`python -m src.compliance_mapping.run_mapping`) matching phases 1–3's conventions. Phases 1–5 have been run sequentially against the real dataset. Orchestrator wiring remains open. | Closed — orchestrator is the remaining gap |
+| Permutation test performance at full dataset scale is untested | **Partially resolved.** The pipeline has completed against the full ~45K-row dataset, so the permutation test does finish, but it has not been formally benchmarked or profiled. | Formally benchmark before assuming performance guarantees |
 
 ---
 
 ## 13. Roadmap
 
-- [ ] Run phases 1–3 against the full, real UCI Adult Income dataset (only synthetic stand-in data used so far)
+- [x] Run phases 1–5 against the full, real UCI Adult Income dataset
 - [ ] Manually inspect the non-ground-truth records flagged by the unsupervised knee-point detector to confirm they're genuine outliers, not noise
 - [ ] Source or explicitly label the anomaly injection rate (3%) as an experimental, non-benchmarked parameter
-- [ ] Decide and implement a numeric threshold approach for `demographic_parity_difference` and `equalized_odds_difference — done via permutation significance test
-- [ ] Design and build the Compliance Mapping Engine (phase 4) — core logic done; **CLI entrypoint still open, see below**
-- [ ] Build the explainability trace from threshold gate through to control ID assignment — done
-- [ ] Write an actual `pytest` suite covering schema validation failures, label-leakage guards, and threshold edge cases — 58 tests, done
-- [ ] Build a CLI entrypoint for the Compliance Mapping Engine (`python -m src.compliance_mapping...`, analogous to phases 1–3) — currently only invoked from tests
-- [ ] Build `src/orchestrator.py` with proper concurrent execution and per-job exception handling, and wire in the new compliance-mapping entrypoint once it exists
-- [ ] Run phases 1–4 together as one continuous pipeline at least once — never yet attempted
-- [ ] Benchmark the permutation test's runtime at full dataset scale (1,000 permutations × 2 metrics × 2 attributes against ~30K+ rows)
+- [x] Decide and implement a numeric threshold approach for `demographic_parity_difference` and `equalized_odds_difference` — done via permutation significance test
+- [x] Design and build the Compliance Mapping Engine (phase 4) — core logic and CLI entrypoint built
+- [x] Build the explainability trace from threshold gate through to control ID assignment
+- [x] Write an actual `pytest` suite — 66 tests across all five modules
+- [x] Build a CLI entrypoint for the Compliance Mapping Engine (`python -m src.compliance_mapping.run_mapping`)
+- [ ] Build `src/orchestrator.py` with proper concurrent execution and per-job exception handling
+- [x] Run phases 1–5 sequentially as one pipeline against the real dataset
+- [ ] Benchmark the permutation test's runtime at full dataset scale (formally profile, not just "it completed")
 - [ ] Decide whether `fairness.significance_level` (0.05 default) is the right value for this specific use case, or whether a stricter value is warranted
-- [ ] Build the Report Generator (phase 5)
+- [x] Build the Report Generator (phase 5) — HTML report implemented; PDF export pending
 - [ ] Populate `docs/nist_mapping_reference.md` and `docs/module_contracts.md`, which are referenced but do not yet exist
 - [ ] Consider an end-to-end test approximating MEASURE 2.13 (TEVV process effectiveness) — confirm the pipeline detects a known-bad classifier and does not false-positive on a known-fair one, beyond the current unit-level permutation-test coverage
 
