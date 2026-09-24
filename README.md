@@ -16,8 +16,8 @@
 | 1 | Ingestion — dataset load, audit-subject model, feature engineering, anomaly injection, synthetic metadata | ✅ Built & sandbox-tested |
 | 2 | Anomaly Detection — IsolationForest, data-driven threshold selection, explainability, evaluation | ✅ Built & sandbox-tested |
 | 3 | Fairness Scanner — Fairlearn metrics, EEOC four-fifths threshold, permutation-test thresholds for demographic parity/equalized odds, small-group safeguards | ✅ Built & sandbox-tested |
-| 4 | Compliance Mapping Engine (core original contribution) | 🟨 Core logic built & unit-tested; **no CLI entrypoint yet** (library functions only — no `run_mapping.py`); never run end-to-end against phases 1–3's real output |
-| 5 | Report Generator (PDF/HTML) | ⬜ Not started |
+| 4 | Compliance Mapping Engine (core original contribution) | ✅ Built & sandbox-tested |
+| 5 | Report Generator (PDF/HTML) | ✅ Built & sandbox-tested: HTML built, PDF pending |
 
 Phases 1–3 have been tested against small synthetic stand-in data during development. **None have yet been run against the real, full UCI Adult Income dataset**, and phases 1–4 have never been run together as one pipeline — only phase-by-phase, module-by-module. Do not treat sandbox-passing as equivalent to a validated run — see [§12](#12-known-limitations--open-items).
 
@@ -315,15 +315,19 @@ python -m src.anomaly_detection.isolation_forest --input data/processed/normaliz
 # 3. Fairness scan (runs concurrently with step 2)
 python -m src.fairness_scanner.run_scan --input data/processed/normalized_log.json --output outputs/logs/fairness_findings.json
 
-wait   # block until both finish
+# 4. Compliance mapping — core logic built
 
-# 4. Compliance mapping — core logic built, but NO CLI entrypoint exists yet.
-# It is currently only exercised through tests/test_compliance_mapping.py,
-# which calls rules_engine.map_finding() / input_reconciler.reconcile()
-# directly in-process. There is no `python -m src.compliance_mapping...`
-# command to run against real anomaly_findings.json / fairness_findings.json
-# output yet — building that entrypoint is on the roadmap (§13).
-# 5. Report generation — NOT YET BUILT
+python -m src.compliance_mapping.run_mapping --anomaly-input outputs/logs/anomaly_findings.json --fairness-input outputs/logs/fairness_findings.json --output outputs/logs/mapped_findings.json
+
+# OR
+
+python -m src.compliance_mapping.run_mapping --anomaly-input outputs/logs/anomaly_findings.json --fairness-input outputs/logs/fairness_findings.json --lookup src/compliance_mapping/nist_control_lookup.yaml --output outputs/logs/mapped_findings.json
+
+# 5. Report generation
+
+python -m src.report_generator.run_report --input outputs/logs/mapped_findings.json --output outputs/reports/audit_report.html
+
+wait   # block until both finish
 ```
 
 ### Run the test suite
