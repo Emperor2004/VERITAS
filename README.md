@@ -333,17 +333,18 @@ wait   # block until both finish
 ### Run the test suite
 
 ```bash
-# All 58 tests, all four modules with tests:
-pytest tests/ -v
+# All 66 tests, all five modules with tests:
+python -m pytest tests/ -v
 
 # One module at a time:
-pytest tests/test_ingestion.py -v
-pytest tests/test_anomaly_detection.py -v
-pytest tests/test_fairness_scanner.py -v
-pytest tests/test_compliance_mapping.py -v
+python -m pytest tests/test_ingestion.py -v
+python -m pytest tests/test_anomaly_detection.py -v
+python -m pytest tests/test_fairness_scanner.py -v
+python -m pytest tests/test_compliance_mapping.py -v
+python -m pytest tests/test_report_generator.py -v
 
 # Quiet summary only:
-pytest tests/ -q
+python -m pytest tests/ -q
 ```
 
 `src/orchestrator.py` does not exist yet. When built, it should run stages 2/3 via `concurrent.futures.ProcessPoolExecutor`, call `.result()` on both futures before invoking compliance mapping, and propagate either exception individually rather than letting one silent failure block the join indefinitely. It will also need to give the Compliance Mapping Engine an actual entrypoint to call, since none exists today.
@@ -374,7 +375,7 @@ pytest tests/ -q
 - This module is pure statistics over already-made predictions, not a learned model.
 - Output: `fairness_findings.json` (per-attribute, aggregate — one row per attribute carries all three metrics plus their violation flags and p-values; a structurally different shape than anomaly findings, which the compliance mapping engine must reconcile without force-merging).
 
-### 9.4 Compliance Mapping Engine ★ — core logic built, no CLI entrypoint
+### 9.4 Compliance Mapping Engine
 
 The project's original contribution. Everything above uses off-the-shelf libraries (scikit-learn, Fairlearn) as-is; this module is the custom rules-based translation layer from a raw technical finding to a specific, citable NIST AI RMF control ID.
 
@@ -388,7 +389,7 @@ The project's original contribution. Everything above uses off-the-shelf librari
   - `recalibration_required` is documented directly in the YAML: `protected_attributes`, `fairness.min_group_size_warning`, and `fairness.significance_level` will not transfer correctly to a different (e.g. a sponsoring company's) dataset without human review — this is disclosed proactively, not discovered live during a demo.
 - **What this module deliberately does NOT do:** GOVERN-function coverage. NIST's GOVERN function (organizational accountability, training, documented risk tolerance) cannot be evidenced by a tool inspecting model outputs — it's the deploying organization's responsibility. VERITAS automates evidence generation for MEASURE and produces citations into MAP and MANAGE; it does not, and structurally cannot, automate GOVERN.
 
-### 9.5 Report Generator — NOT YET BUILT
+### 9.5 Report Generator
 - Will render `mapped_findings.json` into a structured PDF/HTML audit report.
 
 ---
@@ -413,7 +414,7 @@ Everything above is verified by `tests/test_compliance_mapping.py` (see §11) ag
 **An automated `pytest` suite exists: 58 tests across all four modules with code, all passing.**
 
 ```bash
-pytest tests/ -v      # 58 passed
+python -m pytest tests/ -v      # 66 passed
 ```
 
 | Module | Test file | What's covered |
@@ -458,10 +459,10 @@ pytest tests/ -v      # 58 passed
 - [ ] Run phases 1–3 against the full, real UCI Adult Income dataset (only synthetic stand-in data used so far)
 - [ ] Manually inspect the non-ground-truth records flagged by the unsupervised knee-point detector to confirm they're genuine outliers, not noise
 - [ ] Source or explicitly label the anomaly injection rate (3%) as an experimental, non-benchmarked parameter
-- [x] ~~Decide and implement a numeric threshold approach for `demographic_parity_difference` and `equalized_odds_difference`~~ — done via permutation significance test
-- [x] ~~Design and build the Compliance Mapping Engine (phase 4)~~ — core logic done; **CLI entrypoint still open, see below**
-- [x] ~~Build the explainability trace from threshold gate through to control ID assignment~~ — done
-- [x] ~~Write an actual `pytest` suite covering schema validation failures, label-leakage guards, and threshold edge cases~~ — 58 tests, done
+- [ ] Decide and implement a numeric threshold approach for `demographic_parity_difference` and `equalized_odds_difference — done via permutation significance test
+- [ ] Design and build the Compliance Mapping Engine (phase 4) — core logic done; **CLI entrypoint still open, see below**
+- [ ] Build the explainability trace from threshold gate through to control ID assignment — done
+- [ ] Write an actual `pytest` suite covering schema validation failures, label-leakage guards, and threshold edge cases — 58 tests, done
 - [ ] Build a CLI entrypoint for the Compliance Mapping Engine (`python -m src.compliance_mapping...`, analogous to phases 1–3) — currently only invoked from tests
 - [ ] Build `src/orchestrator.py` with proper concurrent execution and per-job exception handling, and wire in the new compliance-mapping entrypoint once it exists
 - [ ] Run phases 1–4 together as one continuous pipeline at least once — never yet attempted
