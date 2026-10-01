@@ -40,16 +40,31 @@ def train_audit_subject(
     target_col: str = "income",
     test_size: float = 0.2,
     random_state: int = 42,
+    trainable_mask=None,
 ):
     """Trains the stand-in classifier and returns predictions + confidence
     for the FULL dataset (train and test alike) -- VERITAS audits prediction
     logs, so predictions are needed for every record shipped downstream,
-    not just a held-out test split."""
+    not just a held-out test split.
+
+    `trainable_mask`: optional boolean array, same length as `df`. Rows
+    where it is False are excluded from training (but still get a
+    prediction from the fitted model). Required when `df` contains
+    deliberately-injected anomaly rows (see feature_anomalies.py) -- without
+    this, the model partially learns to treat injected outliers as normal,
+    which would make both anomaly-detection and fairness evaluation
+    unreliable. Defaults to None (train on everything) to keep this
+    function's old behavior for any other caller."""
     X = df[NUMERIC_COLS + CATEGORICAL_COLS]
     y = (df[target_col].astype(str).str.strip().str.rstrip(".") == ">50K").astype(int)
 
+    if trainable_mask is not None:
+        X_pool, y_pool = X[trainable_mask], y[trainable_mask]
+    else:
+        X_pool, y_pool = X, y
+
     X_train, _, y_train, _ = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=y
+        X_pool, y_pool, test_size=test_size, random_state=random_state, stratify=y_pool
     )
 
     pipeline = build_pipeline(random_state=random_state)

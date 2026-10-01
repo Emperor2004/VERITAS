@@ -38,10 +38,34 @@ anomaly_injection:
   # and so detection performance can actually be measured against a
   # ground-truth label in phase 2. This label MUST NOT be fed into
   # IsolationForest's feature set -- it exists only for evaluation.
+  #
+  # The total rate below is split across three independent patterns by
+  # type_weights (normalized internally -- need not sum to 1), so
+  # anomaly_detection.isolation_forest.contamination still only needs to
+  # match this one injection_rate, unchanged.
   injection_rate: 0.03
   random_state: 7
   rare_auth_methods: ["legacy_token", "unverified_device"]
   normal_hour_range: [7, 22]   # 7am-10pm treated as normal operating hours
+
+  type_weights:
+    # Synthetic-metadata pattern (original): off-hours timestamp + rare
+    # auth method, injected together.
+    off_hours_rare_auth: 0.4
+    # Real-feature pattern: implausible combination of actual UCI columns.
+    # Tests the detector on the audit subject's own inputs, not just
+    # synthetic wrapper fields.
+    feature_outlier: 0.3
+    # Real-feature pattern: exact duplicate of another (non-anomalous)
+    # record's full feature set. Deliberately left undetectable by
+    # IsolationForest -- see feature_anomalies.py docstring and README
+    # known-limitations.
+    duplicate_record: 0.3
+
+  feature_outlier:
+    age_range: [12, 17]              # below legal working age in the source jurisdiction
+    hours_per_week_range: [90, 99]   # dataset max is 99; this plus a teenage age is the implausible pair
+    capital_gain_min: 90000          # dataset-wide capital-gain is heavily right-skewed; this is far upper tail
 
 anomaly_detection:
   isolation_forest:

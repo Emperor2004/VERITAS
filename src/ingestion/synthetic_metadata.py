@@ -20,15 +20,43 @@ from typing import List, Dict
 from faker import Faker
 
 
-def compute_anomaly_mask(n: int, injection_rate: float, random_state: int) -> np.ndarray:
-    """Decides which records get an injected operational anomaly.
-    Kept separate from generate_metadata so the same mask can be reused
-    elsewhere (e.g. numeric feature injection) if needed later."""
+TYPE_OFF_HOURS_RARE_AUTH = "off_hours_rare_auth"
+
+
+def assign_anomaly_types(
+    n: int, injection_rate: float, type_weights: Dict[str, float], random_state: int
+) -> np.ndarray:
+    """Decides which records get an injected operational anomaly AND which
+    pattern each one gets. Replaces the old boolean compute_anomaly_mask:
+    the total injected rate is unchanged (still `injection_rate`, so
+    anomaly_detection.contamination in config.yaml needs no change), but
+    that budget is now split across named patterns via `type_weights`
+    (normalized internally, so weights need not sum to 1).
+
+    Returns an array of length n: None for a normal record, otherwise one
+    of the keys in `type_weights`.
+    """
     rng = np.random.default_rng(random_state)
-    return rng.random(n) < injection_rate
+    is_anomaly = rng.random(n) < injection_rate
+    types = np.full(n, None, dtype=object)
+
+    names = list(type_weights.keys())
+    weights = np.array([type_weights[k] for k in names], dtype=float)
+    weights = weights / weights.sum()
+
+    anomaly_idx = np.where(is_anomaly)[0]
+    if len(anomaly_idx):
+        types[anomaly_idx] = rng.choice(names, size=len(anomaly_idx), p=weights)
+    return types
 
 
-def generate_metadata(n: int, config: dict, anomaly_mask: np.ndarray, seed: int = 42) -> List[Dict]:
+def generate_metadata(n: int, config: dict, anomaly_types: np.ndarray, seed: int = 42) -> List[Dict]:
+    """`anomaly_types[i]` is None for a normal record, or an anomaly type
+    name. Only TYPE_OFF_HOURS_RARE_AUTH changes the generated metadata
+    (timestamp/auth_method) -- other anomaly types (feature_outlier,
+    duplicate_record) live entirely in the real feature columns, handled
+    by feature_anomalies.py, and get normal-looking metadata here so the
+    two signal channels stay independent and don't double-count."""
     fake = Faker()
     Faker.seed(seed)
 
@@ -40,9 +68,9 @@ def generate_metadata(n: int, config: dict, anomaly_mask: np.ndarray, seed: int 
 
     records = []
     for i in range(n):
-        is_anomaly = bool(anomaly_mask[i])
+        anomaly_type = anomaly_types[i]
 
-        if is_anomaly:
+        if anomaly_type == TYPE_OFF_HOURS_RARE_AUTH:
             # Off-hours timestamp: pick a date, force the hour outside normal range
             base_date = fake.date_between(start_date=start.date(), end_date=end.date())
             off_hour = fake.random_element(
@@ -61,6 +89,7 @@ def generate_metadata(n: int, config: dict, anomaly_mask: np.ndarray, seed: int 
             "timestamp": ts.isoformat(),
             "session_id": fake.uuid4(),
             "auth_method": auth_method,
-            "ground_truth_operational_anomaly": is_anomaly,
+            "ground_truth_operational_anomaly": anomaly_type is not None,
+            "ground_truth_anomaly_type": anomaly_type,
         })
     return records

@@ -45,6 +45,12 @@ class NormalizedLogRecord(BaseModel):
     # only use it afterward to score precision/recall.
     ground_truth_operational_anomaly: Optional[bool] = Field(default=None)
 
+    # Which injected pattern produced the anomaly above (None for a normal
+    # record). Evaluation-only, same leakage rule as the field above: lets
+    # phase 2 report precision/recall per anomaly type instead of only in
+    # aggregate, without changing the detector's input features.
+    ground_truth_anomaly_type: Optional[str] = Field(default=None)
+
     @field_validator("protected_attributes")
     @classmethod
     def must_include_configured_attributes(cls, v: Dict[str, str]) -> Dict[str, str]:

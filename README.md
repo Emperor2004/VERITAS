@@ -141,7 +141,8 @@ veritas/
 │   │   ├── log_loader.py           # phase 1 CLI entrypoint — loads data, orchestrates the rest
 │   │   ├── audit_subject_model.py  # trains the stand-in "bank" classifier (LogisticRegression)
 │   │   ├── feature_engineering.py  # builds IsolationForest's feature set
-│   │   ├── synthetic_metadata.py   # Faker metadata + deliberate anomaly injection
+│   │   ├── synthetic_metadata.py   # Faker metadata; injects the off_hours_rare_auth anomaly pattern
+│   │   ├── feature_anomalies.py    # injects feature_outlier and duplicate_record patterns into real UCI columns
 │   │   └── schema.py               # normalized_log.json schema + validation
 │   │
 │   ├── anomaly_detection/
@@ -207,7 +208,7 @@ Each module directory is independently runnable and independently testable. No m
 | Anomaly Detection | `scikit-learn` (`IsolationForest`) | Unsupervised outlier detection over prediction logs |
 | Threshold Selection | Custom (knee-point geometry + grid search) | Data-driven contamination selection, replacing an arbitrary constant |
 | Fairness Scanning | `Fairlearn` | Demographic parity, equalized odds, disparate impact ratio (via `demographic_parity_ratio`); demographic parity/equalized odds violations resolved via a permutation significance test (custom, `numpy`-based) since neither has an external cited threshold like EEOC's |
-| Synthetic Metadata & Anomaly Injection | `Faker` + `numpy` | Timestamps, session IDs, auth methods, with a deliberately injected known-rate operational anomaly for detector evaluation |
+| Synthetic Metadata & Anomaly Injection | `Faker` + `numpy` | Timestamps, session IDs, auth methods, plus three deliberately injected, known-rate operational anomaly patterns for detector evaluation — see §9.1 |
 | Schema Validation | `pydantic` | Fail-loud validation at every module boundary (ingestion output, anomaly findings, fairness findings) |
 | Dataset Access | `ucimlrepo` | Fetches and locally caches UCI Adult Income |
 | Compliance Mapping | Custom rules engine (Python, YAML-driven lookup) | Finding → NIST AI RMF control ID translation — core logic built, unit-tested, and CLI-runnable |
@@ -288,15 +289,26 @@ synthetic_metadata:
   timestamp_end: "2026-06-30T23:59:59"
 
 anomaly_injection:
-  injection_rate: 0.03           # NOT externally justified — see §12
+  injection_rate: 0.03           # total rate across ALL patterns below — NOT externally justified, see §12
   random_state: 7
   rare_auth_methods: ["legacy_token", "unverified_device"]
   normal_hour_range: [7, 22]
+
+  type_weights:                  # normalized internally — need not sum to 1
+    off_hours_rare_auth: 0.4     # original pattern: off-hours timestamp + rare auth method together
+    feature_outlier: 0.3         # implausible combination of real UCI feature columns
+    duplicate_record: 0.3        # exact copy of another clean record's full feature row
+
+  feature_outlier:
+    age_range: [12, 17]
+    hours_per_week_range: [90, 99]
+    capital_gain_min: 90000
 ```
 
 **Threshold justification status:**
 - `disparate_impact_ratio_threshold` (0.8) — externally cited (EEOC Uniform Guidelines). Defensible as-is.
-- `anomaly_injection.injection_rate` (0.03) — an internal design choice, not sourced from an external benchmark. Flagged, not hidden.
+- `anomaly_injection.injection_rate` (0.03) — an internal design choice, not sourced from an external benchmark. Flagged, not hidden. Unchanged by the type split below: `type_weights` divides this one rate across three patterns, it does not add to it, so `anomaly_detection.isolation_forest.contamination` still only needs to match this single number.
+- `anomaly_injection.type_weights` — relative frequency of each injected pattern, not individually benchmarked against any real-world anomaly mix; same unresolved-benchmark caveat as the rate itself applies per-type, not just in aggregate.
 - `fairness.significance_level` (0.05) — a disclosed policy choice controlling the permutation test's false-positive sensitivity, not derived from data. A stricter value (e.g. 0.01) may be warranted for high-stakes decisions; the default has not been specifically justified for this use case.
 - IsolationForest's `contamination` parameter is **no longer a config value at all** — phase 2 derives it per-run from the dataset's own score distribution (§9.2). `demographic_parity_difference` / `equalized_odds_difference` are similarly no longer unthresholded — phase 3 now resolves a violation flag for each via a seeded permutation significance test (§9.3), rather than only reporting the raw number.
 
@@ -360,8 +372,12 @@ python -m pytest tests/ -q
 - Loads UCI Adult Income (cached locally after first fetch via `ucimlrepo`), explicitly handling the dataset's `" ?"` missing-value convention before dropping incomplete rows (pandas does not treat this as `NaN` by default — this was a real bug caught and fixed during development).
 - Trains a stand-in classifier (`LogisticRegression`) on the data — this produces the predictions and confidence scores VERITAS actually audits, since UCI Adult Income ships ground-truth labels only, not model predictions.
 - Builds an anomaly-detection feature set (`feature_engineering.py`) separate from the audit-subject model's own preprocessing, so anomaly detection examines prediction *behavior* rather than re-deriving the model's own decision boundary.
-- Generates synthetic operational metadata (timestamp, session ID, auth method) via Faker, with a **deliberately injected, known-rate operational anomaly** (off-hours timestamp + rare auth method) rather than uniform random noise — this gives the anomaly detector genuine signal to find and a ground-truth label to evaluate against.
-- Output: `normalized_log.json`, validated against a `pydantic` schema that fails loudly on malformed records rather than silently dropping them.
+- Generates synthetic operational metadata (timestamp, session ID, auth method) via Faker, with a **deliberately injected, known-rate operational anomaly** rather than uniform random noise — this gives the anomaly detector genuine signal to find and a ground-truth label to evaluate against. The injected rate (`anomaly_injection.injection_rate`) is split across three independent patterns (`anomaly_injection.type_weights`), so evaluation isn't resting on a single easy-to-separate signal:
+  - **`off_hours_rare_auth`** (original) — off-hours timestamp + rare auth method, injected into the synthetic metadata only.
+  - **`feature_outlier`** (`feature_anomalies.py`) — an internally implausible combination of real UCI feature columns (e.g. a teenage age together with very high hours-per-week and capital-gain). This is the only pattern that tests the detector against the audit subject's actual inputs rather than synthetic wrapper fields.
+  - **`duplicate_record`** (`feature_anomalies.py`) — an exact copy of another, non-anomalous record's full feature row. Deliberately left undetectable by `IsolationForest` on purpose: a density-based detector treats an exact repeat of a common point as *more* typical, not less, so this pattern documents a real blind spot in the evaluation rather than hiding it (see §12).
+  - The two feature-level patterns mutate the real UCI columns **before** the audit-subject model is trained, and injected rows are excluded from that training split (`audit_subject_model.train_audit_subject`'s `trainable_mask`) while still receiving a prediction. Training on a deliberately-injected outlier would partially teach the model to treat it as normal, undermining both this evaluation and the fairness scanner's.
+- Output: `normalized_log.json`, validated against a `pydantic` schema that fails loudly on malformed records rather than silently dropping them. Each record carries both `ground_truth_operational_anomaly` (bool) and `ground_truth_anomaly_type` (which of the three patterns, or `null`) — the type field is evaluation-only, like the bool it extends, and must never be fed into `IsolationForest` as an input feature.
 
 ### 9.2 Anomaly Detection (`src/anomaly_detection/`)
 - Runs `IsolationForest` over the engineered feature set (numeric UCI features + prediction confidence + the injected operational-anomaly flags).
@@ -448,7 +464,9 @@ python -m pytest tests/ -v      # 66 passed
 | No explainability trace between the anomaly/fairness threshold gate and the resulting control ID assignment | **Resolved.** `explainability_trace.py` attaches the specific matched NIST action text and a trigger explanation (including top-contributing-features / small-group caveats) to every mapped finding. | Closed — verify against a real dataset run before treating as fully proven at scale |
 | Sub-threshold findings silently discarded | **Resolved by design.** `severity_tier` (`informational` / `violation`) is required on every finding; `informational` findings are still mapped and output, never dropped. Enforced by `output_schema.py`'s validation. | Closed |
 | No finalized numeric thresholds for `demographic_parity_difference` / `equalized_odds_difference` | **Resolved via permutation significance test**, not a fixed constant. `significance_level` (0.05 default) remains a disclosed human policy choice — do not present the permutation test as removing human judgment entirely, only as removing the arbitrary-constant problem. | Say "data-driven with a disclosed significance threshold," not "fully automatic" |
-| Anomaly injection rate (3%) has no external benchmark | **Unresolved.** Chosen as an internal design parameter, not sourced from an industry anomaly base-rate. | Must be either justified or explicitly labeled as an experimental parameter in any report |
+| Anomaly injection rate (3%) has no external benchmark | **Unresolved.** Chosen as an internal design parameter, not sourced from an industry anomaly base-rate. Now split across three patterns via `type_weights` (§7, §9.1); the per-type split is an additional internal design choice on top of the already-unbenchmarked total. | Must be either justified or explicitly labeled as an experimental parameter in any report |
+| `duplicate_record` anomaly pattern is structurally undetectable by `IsolationForest` | **By design, not a gap.** A density-based detector treats an exact repeat of a common feature vector as more typical, not less — this pattern exists specifically to make that blind spot visible in the evaluation instead of silently absent from it. | State this as a deliberate limitation of the chosen detector family if asked, not as a missed anomaly type |
+| Phase 2's precision/recall evaluation does not yet break down by anomaly type | **Open.** `ground_truth_anomaly_type` is written by phase 1 and validated by the schema, but `isolation_forest.py`'s evaluation still reports a single aggregate precision/recall against the overall `ground_truth_operational_anomaly` bool. | Wire a per-type breakdown before citing detection performance on any individual pattern (especially `duplicate_record`, which should show near-zero recall and is expected to) |
 | Two threshold-selection methods for IsolationForest contamination can disagree substantially | **Resolved as designed, documented as expected behavior, not a bug.** On test data, unsupervised knee-point selected ~10.5% vs supervised grid search's ~3%. This is diagnostic (real numeric outliers exist beyond the injected ones), not an error — but it means the 10.5%-level flagged set has NOT been manually verified for correctness. | Manually inspect non-ground-truth flagged records before citing detector performance |
 | `config/thresholds.yaml` as a separate file (shown in earlier README drafts and repo trees) | **Resolved — was never actually built.** All configuration, including fairness thresholds, lives in a single `config/config.yaml`. | This README previously misrepresented the repo structure; corrected here |
 | No automated test suite | **Resolved.** 66 tests across all five modules (§11). Not resolved: no orchestrator-level integration test, no CI wiring — see §11's explicit "not covered" list. | Manual verification no longer needed for unit-level regressions; an end-to-end orchestrator integration test is still an open item |
@@ -464,6 +482,8 @@ python -m pytest tests/ -v      # 66 passed
 ## 13. Roadmap
 
 - [x] Run phases 1–5 against the full, real UCI Adult Income dataset
+- [x] Add additional injected anomaly patterns beyond off-hours-timestamp + rare-auth-method — `feature_outlier` and `duplicate_record` added, splitting the same total `injection_rate`
+- [ ] Break down phase 2's precision/recall by `ground_truth_anomaly_type` instead of only the aggregate bool — needed to show `duplicate_record`'s expected near-zero recall as a documented result, not an unexplained gap
 - [ ] Manually inspect the non-ground-truth records flagged by the unsupervised knee-point detector to confirm they're genuine outliers, not noise
 - [ ] Source or explicitly label the anomaly injection rate (3%) as an experimental, non-benchmarked parameter
 - [x] Decide and implement a numeric threshold approach for `demographic_parity_difference` and `equalized_odds_difference` — done via permutation significance test

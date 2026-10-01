@@ -10,12 +10,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import numpy as np
 import pandas as pd
 import yaml
 
 from src.ingestion.audit_subject_model import train_audit_subject
 from src.ingestion.feature_engineering import engineer_features
-from src.ingestion.synthetic_metadata import generate_metadata, compute_anomaly_mask
+from src.ingestion.feature_anomalies import inject_feature_space_outliers, inject_duplicate_records
+from src.ingestion.synthetic_metadata import generate_metadata, assign_anomaly_types
 from src.ingestion.schema import validate_records
 
 ADULT_COLUMNS = [
@@ -63,20 +65,40 @@ def build_normalized_log(df: pd.DataFrame, config: dict) -> list:
         print(f"[phase1] dropped {n_dropped} rows with missing/'?' values "
               f"({n_dropped / n_before:.1%} of raw data)")
 
+    inj_cfg = config["anomaly_injection"]
+
+    # Decide WHICH records are anomalous and WHICH pattern each gets, before
+    # anything else. Order matters: feature_outlier/duplicate_record mutate
+    # `df` itself, and the audit-subject model below must be trained on the
+    # pre-mutation, non-anomalous rows only -- otherwise it partially learns
+    # to treat the injected patterns as normal, undermining both the
+    # anomaly-detection and fairness evaluations downstream.
+    anomaly_types = assign_anomaly_types(
+        len(df), inj_cfg["injection_rate"], inj_cfg["type_weights"], inj_cfg["random_state"]
+    )
+    is_anomaly = anomaly_types != None  # noqa: E711 (vectorized, not identity-check-on-scalar)
+    feature_outlier_idx = np.where(anomaly_types == "feature_outlier")[0]
+    duplicate_idx = np.where(anomaly_types == "duplicate_record")[0]
+    clean_idx = np.where(~is_anomaly)[0]
+
+    inject_feature_space_outliers(
+        df, feature_outlier_idx, inj_cfg["feature_outlier"], inj_cfg["random_state"]
+    )
+    # Duplicates are sourced only from clean_idx, so a duplicate is never a
+    # copy of another injected anomaly.
+    inject_duplicate_records(df, duplicate_idx, clean_idx, inj_cfg["random_state"])
+
     predicted_label, confidence, true_label = train_audit_subject(
         df,
         test_size=config["audit_subject_model"]["test_size"],
         random_state=config["audit_subject_model"]["random_state"],
+        trainable_mask=~is_anomaly,
     )
 
-    inj_cfg = config["anomaly_injection"]
-    anomaly_mask = compute_anomaly_mask(
-        len(df), inj_cfg["injection_rate"], inj_cfg["random_state"]
-    )
     metadata = generate_metadata(len(df), config["synthetic_metadata"] | {
         "rare_auth_methods": inj_cfg["rare_auth_methods"],
         "normal_hour_range": inj_cfg["normal_hour_range"],
-    }, anomaly_mask)
+    }, anomaly_types)
 
     features_df = engineer_features(
         df, predicted_label, confidence, metadata,
@@ -100,9 +122,12 @@ def build_normalized_log(df: pd.DataFrame, config: dict) -> list:
         }
         records.append(record)
 
-    n_injected = int(anomaly_mask.sum())
+    n_injected = int(is_anomaly.sum())
+    type_counts = {
+        t: int((anomaly_types == t).sum()) for t in inj_cfg["type_weights"]
+    }
     print(f"[phase1] injected {n_injected} operational anomalies "
-          f"({n_injected / len(df):.1%} of records)")
+          f"({n_injected / len(df):.1%} of records) by type: {type_counts}")
 
     return records
 
