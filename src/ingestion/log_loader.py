@@ -132,6 +132,25 @@ def build_normalized_log(df: pd.DataFrame, config: dict) -> list:
     return records
 
 
+def run_ingestion(config: dict, limit: int | None = None) -> list[dict]:
+    """Run Phase 1 ingestion pipeline in-memory.
+
+    Args:
+        config: Parsed configuration dictionary.
+        limit: Optional row limit for fast runs/testing.
+
+    Returns:
+        list[dict]: List of validated normalized log record dicts.
+    """
+    df = load_raw_dataset(config)
+    if limit:
+        df = df.sample(n=limit, random_state=42).reset_index(drop=True)
+
+    raw_records = build_normalized_log(df, config)
+    validated = validate_records(raw_records)
+    return [r.model_dump(mode="json") for r in validated]
+
+
 def main():
     parser = argparse.ArgumentParser(description="VERITAS Phase 1: ingestion pipeline")
     parser.add_argument("--config", default="config/config.yaml")
@@ -144,21 +163,13 @@ def main():
         config = yaml.safe_load(f)
 
     print("[phase1] loading raw dataset...")
-    df = load_raw_dataset(config)
-    if args.limit:
-        df = df.sample(n=args.limit, random_state=42).reset_index(drop=True)
-
-    print(f"[phase1] {len(df)} records loaded, training audit-subject model and building log...")
-    raw_records = build_normalized_log(df, config)
-
-    print("[phase1] validating against schema...")
-    validated = validate_records(raw_records)  # raises loudly on malformed records
+    records = run_ingestion(config, limit=args.limit)
 
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w") as f:
-        json.dump([r.model_dump(mode="json") for r in validated], f, indent=2, default=str)
+        json.dump(records, f, indent=2, default=str)
 
-    print(f"[phase1] wrote {len(validated)} records to {args.output}")
+    print(f"[phase1] wrote {len(records)} records to {args.output}")
 
 
 if __name__ == "__main__":

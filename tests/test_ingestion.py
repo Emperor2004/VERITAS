@@ -15,7 +15,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.ingestion.schema import NormalizedLogRecord, validate_records
-from src.ingestion.synthetic_metadata import compute_anomaly_mask, generate_metadata
+from src.ingestion.synthetic_metadata import assign_anomaly_types, compute_anomaly_mask, generate_metadata
 from src.ingestion.feature_engineering import engineer_features
 from src.ingestion.audit_subject_model import train_audit_subject
 
@@ -83,6 +83,19 @@ def test_compute_anomaly_mask_rate_is_approximately_correct():
     mask = compute_anomaly_mask(n, injection_rate=0.03, random_state=7)
     observed_rate = mask.sum() / n
     assert abs(observed_rate - 0.03) < 0.005  # generous tolerance for a random draw
+
+
+def test_assign_anomaly_types_splits_budget_by_weights():
+    n = 30000
+    weights = {"pattern_a": 0.6, "pattern_b": 0.4}
+    types = assign_anomaly_types(n, injection_rate=0.1, type_weights=weights, random_state=42)
+    assert len(types) == n
+    anomalies = [t for t in types if t is not None]
+    rate = len(anomalies) / n
+    assert abs(rate - 0.1) < 0.01
+    count_a = sum(1 for t in anomalies if t == "pattern_a")
+    ratio_a = count_a / len(anomalies)
+    assert abs(ratio_a - 0.6) < 0.03
 
 
 _METADATA_CONFIG = {

@@ -1,0 +1,20 @@
+{
+  "findings": [
+    {
+      "attribute": "sex",
+      "selection_rates": {
+        "Female": 0.109,
+        "Male": 0.305
+      },
+      "disparate_impact_ratio": 0.357,
+      "disparate_impact_violation": true,
+      "demographic_parity_difference": 0.196,
+      "demographic_parity_p_value": 0.001,
+      "demographic_parity_violation": true,
+      "equalized_odds_difference": 0.182,
+      "equalized_odds_p_value": 0.001,
+      "equalized_odds_violation": true,
+      "small_group_warning": []
+    }
+  ]
+}

@@ -21,31 +21,25 @@ from src.fairness_scanner.metrics import (
 from src.fairness_scanner.output_schema import validate_output
 
 
-def main():
-    parser = argparse.ArgumentParser(description="VERITAS Phase 3: fairness scanning")
-    parser.add_argument("--input", required=True)
-    parser.add_argument("--output", required=True)
-    parser.add_argument("--config", default="config/config.yaml")
-    args = parser.parse_args()
+def run_fairness_scan(records: list, config: dict) -> dict:
+    """Run fairness scan across all protected attributes present in records.
 
-    with open(args.config) as f:
-        config = yaml.safe_load(f)
+    Args:
+        records: List of normalized log record dicts.
+        config: Parsed configuration dictionary containing fairness settings.
 
-    eeoc_threshold = config["fairness"]["disparate_impact_ratio_threshold"]
-    min_group_size = config["fairness"]["min_group_size_warning"]
-    significance_level = config["fairness"].get("significance_level", 0.05)
-    n_permutations = config["fairness"].get("permutations", 1000)
-    permutation_random_state = config["fairness"].get("permutation_random_state", 42)
+    Returns:
+        dict: Findings dictionary matching output_schema.py.
+    """
+    fairness_cfg = config.get("fairness", {})
+    eeoc_threshold = fairness_cfg.get("disparate_impact_ratio_threshold", 0.8)
+    min_group_size = fairness_cfg.get("min_group_size_warning", 30)
+    significance_level = fairness_cfg.get("significance_level", 0.05)
+    n_permutations = fairness_cfg.get("permutations", 1000)
+    permutation_random_state = fairness_cfg.get("permutation_random_state", 42)
 
-    print("[phase3] loading normalized log...")
-    records = load_normalized_log(args.input)
-
-    print("[phase3] building analysis frame...")
     df = build_frame(records)
-
     protected_cols = [c for c in df.columns if c.startswith(PROTECTED_COL_PREFIX)]
-    print(f"[phase3] scanning protected attributes: "
-          f"{[c.replace(PROTECTED_COL_PREFIX, '') for c in protected_cols]}")
 
     findings = []
     for col in protected_cols:
@@ -57,6 +51,38 @@ def main():
         )
         findings.append(finding)
 
+    output = {
+        "findings": findings,
+        "config": {
+            "eeoc_four_fifths_threshold": eeoc_threshold,
+            "min_group_size_warning": min_group_size,
+            "protected_attributes_scanned": [c.replace(PROTECTED_COL_PREFIX, "") for c in protected_cols],
+        },
+    }
+    validate_output(output)
+    return output
+
+
+def main():
+    parser = argparse.ArgumentParser(description="VERITAS Phase 3: fairness scanning")
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--config", default="config/config.yaml")
+    args = parser.parse_args()
+
+    with open(args.config) as f:
+        config = yaml.safe_load(f)
+
+    print("[phase3] loading normalized log...")
+    records = load_normalized_log(args.input)
+
+    print("[phase3] scanning protected attributes...")
+    output = run_fairness_scan(records, config)
+    findings = output["findings"]
+    eeoc_threshold = output["config"]["eeoc_four_fifths_threshold"]
+    min_group_size = output["config"]["min_group_size_warning"]
+
+    for finding in findings:
         status = "VIOLATION" if finding["disparate_impact_violation"] else "within threshold"
         print(f"[phase3]   {finding['attribute']}: disparate_impact_ratio="
               f"{finding['disparate_impact_ratio']} ({status}, threshold={eeoc_threshold})")
@@ -72,18 +98,6 @@ def main():
             print(f"[phase3]   WARNING: small group(s) for {finding['attribute']}: "
                   f"{finding['small_group_warning']} (n < {min_group_size}) -- "
                   f"ratio/difference metrics for this attribute may be statistically unstable")
-
-    output = {
-        "findings": findings,
-        "config": {
-            "eeoc_four_fifths_threshold": eeoc_threshold,
-            "min_group_size_warning": min_group_size,
-            "protected_attributes_scanned": [c.replace(PROTECTED_COL_PREFIX, "") for c in protected_cols],
-        },
-    }
-
-    print("[phase3] validating output against schema...")
-    validate_output(output)
 
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w") as f:

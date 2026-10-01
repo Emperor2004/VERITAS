@@ -23,6 +23,14 @@ from faker import Faker
 TYPE_OFF_HOURS_RARE_AUTH = "off_hours_rare_auth"
 
 
+def compute_anomaly_mask(n: int, injection_rate: float, random_state: int) -> np.ndarray:
+    """Decides which records get an injected operational anomaly.
+    Returns a boolean array of length n where True indicates an anomaly.
+    Retained for backward compatibility alongside assign_anomaly_types."""
+    rng = np.random.default_rng(random_state)
+    return rng.random(n) < injection_rate
+
+
 def assign_anomaly_types(
     n: int, injection_rate: float, type_weights: Dict[str, float], random_state: int
 ) -> np.ndarray:
@@ -52,7 +60,8 @@ def assign_anomaly_types(
 
 def generate_metadata(n: int, config: dict, anomaly_types: np.ndarray, seed: int = 42) -> List[Dict]:
     """`anomaly_types[i]` is None for a normal record, or an anomaly type
-    name. Only TYPE_OFF_HOURS_RARE_AUTH changes the generated metadata
+    name (or boolean True/False for backward compatibility).
+    Only TYPE_OFF_HOURS_RARE_AUTH changes the generated metadata
     (timestamp/auth_method) -- other anomaly types (feature_outlier,
     duplicate_record) live entirely in the real feature columns, handled
     by feature_anomalies.py, and get normal-looking metadata here so the
@@ -69,6 +78,8 @@ def generate_metadata(n: int, config: dict, anomaly_types: np.ndarray, seed: int
     records = []
     for i in range(n):
         anomaly_type = anomaly_types[i]
+        if isinstance(anomaly_type, (bool, np.bool_)):
+            anomaly_type = TYPE_OFF_HOURS_RARE_AUTH if anomaly_type else None
 
         if anomaly_type == TYPE_OFF_HOURS_RARE_AUTH:
             # Off-hours timestamp: pick a date, force the hour outside normal range

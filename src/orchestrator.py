@@ -33,6 +33,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 PY = sys.executable
 
 
@@ -194,12 +198,31 @@ def main() -> int:
     ap.add_argument("--to-phase", type=int, default=5, choices=range(1, 6))
     ap.add_argument("--only", type=int, choices=range(1, 6), help="run a single phase")
     ap.add_argument("--dry-run", action="store_true", help="print the plan and exit")
+    ap.add_argument("--in-memory", action="store_true", help="run all phases in-memory via VeritasPipeline")
+    ap.add_argument("--limit", type=int, default=None, help="optional record limit for faster runs")
     args = ap.parse_args()
 
     if args.from_phase > args.to_phase:
         ap.error("--from-phase cannot exceed --to-phase")
 
     root = args.root.resolve()
+
+    if args.in_memory:
+        from src.pipeline import VeritasPipeline
+        cfg_file = root / "config" / "config.yaml"
+        lookup_file = root / "src" / "compliance_mapping" / "nist_control_lookup.yaml"
+        print(f"-> running VERITAS in-memory pipeline (config={cfg_file})")
+        pipeline = VeritasPipeline.from_config_file(cfg_file, lookup_path=lookup_file)
+        t0 = time.monotonic()
+        artifacts = pipeline.run_all(
+            limit=args.limit,
+            save_artifacts=True,
+            output_dir=root / "outputs",
+        )
+        elapsed = round(time.monotonic() - t0, 2)
+        print(f"pipeline complete in {elapsed}s; artifacts saved to {root / 'outputs'}")
+        return 0
+
     groups = select(PIPELINE, args.from_phase, args.to_phase, args.only)
     if not groups:
         ap.error("no stages selected")

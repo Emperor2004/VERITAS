@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "record_id": "SESS-0000001",
+      "anomaly_score": 0.4521,
+      "is_anomaly": true,
+      "top_contributing_features": [
+        {"feature": "is_off_hours", "z_score": 3.42},
+        {"feature": "is_rare_auth_method", "z_score": 2.81}
+      ]
+    },
+    {
+      "record_id": "SESS-0000002",
+      "anomaly_score": -0.1245,
+      "is_anomaly": false,
+      "top_contributing_features": [
+        {"feature": "age", "z_score": 0.31}
+      ]
+    }
+  ]
+}

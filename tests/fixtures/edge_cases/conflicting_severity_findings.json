@@ -1,0 +1,16 @@
+[
+  {
+    "finding_type": "fairness_finding",
+    "metric_name": "disparate_impact_ratio",
+    "observed_value": 0.72,
+    "severity_tier": "violation",
+    "source_record_id": "race"
+  },
+  {
+    "finding_type": "anomaly_finding",
+    "metric_name": null,
+    "observed_value": -0.05,
+    "severity_tier": "informational",
+    "source_record_id": "SESS-0000042"
+  }
+]

@@ -1,0 +1,4 @@
+version: "1.0"
+controls:
+  - id: "INVALID_CONTROL"
+    # Missing required 'title', 'citation', 'actions'

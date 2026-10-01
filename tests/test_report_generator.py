@@ -102,3 +102,26 @@ def test_write_html_report_end_to_end(tmp_path):
     content = output_path.read_text()
     assert "VERITAS Audit Report" in content
     assert "disparate_impact_ratio" in content
+
+
+# ---- pdf_report.py -----------------------------------------------------------
+
+def test_check_weasyprint_available_returns_bool_and_message():
+    from src.report_generator.pdf_report import check_weasyprint_available
+    is_avail, msg = check_weasyprint_available()
+    assert isinstance(is_avail, bool)
+    assert isinstance(msg, str)
+    assert len(msg) > 0
+
+
+def test_write_pdf_report_handles_missing_runtime_gracefully(tmp_path):
+    from src.report_generator.pdf_report import check_weasyprint_available, write_pdf_report
+    is_avail, _ = check_weasyprint_available()
+    out_pdf = tmp_path / "test.pdf"
+    if not is_avail:
+        with pytest.raises(RuntimeError, match="WeasyPrint is not functional"):
+            write_pdf_report(_sample_findings(), out_pdf)
+    else:
+        success = write_pdf_report(_sample_findings(), out_pdf)
+        assert success is True
+        assert out_pdf.exists()

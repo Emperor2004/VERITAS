@@ -149,6 +149,45 @@ def evaluate_against_ground_truth(records: list, is_anomaly) -> dict | None:
     }
 
 
+def run_anomaly_detection(
+    records: list,
+    random_state: int = 42,
+    n_estimators: int = 100,
+    contamination_override: float | None = None,
+    top_n_features: int = 3,
+) -> dict:
+    """Run anomaly detection pipeline programmatically on normalized log records.
+
+    Args:
+        records: List of normalized log records.
+        random_state: Random state for IsolationForest reproducibility.
+        n_estimators: Number of trees in IsolationForest.
+        contamination_override: Optional manual contamination float.
+        top_n_features: Top contributing features per anomaly finding.
+
+    Returns:
+        dict: Complete anomaly detection output payload matching output_schema.
+    """
+    X, anomaly_scores, is_anomaly, threshold_report = run_detection(
+        records, random_state, n_estimators, contamination_override=contamination_override
+    )
+    findings = build_findings(records, X, anomaly_scores, is_anomaly, top_n_features=top_n_features)
+    eval_result = evaluate_against_ground_truth(records, is_anomaly)
+
+    output = {
+        "findings": findings,
+        "evaluation": eval_result,
+        "threshold_selection": threshold_report,
+        "config": {
+            "n_estimators": n_estimators,
+            "random_state": random_state,
+            "manual_contamination_override": contamination_override,
+        },
+    }
+    validate_output(output)
+    return output
+
+
 def main():
     parser = argparse.ArgumentParser(description="VERITAS Phase 2: anomaly detection")
     parser.add_argument("--input", required=True)
@@ -170,10 +209,14 @@ def main():
     records = load_normalized_log(args.input)
 
     print("[phase2] running IsolationForest and deriving threshold...")
-    X, anomaly_scores, is_anomaly, threshold_report = run_detection(
-        records, args.random_state, args.n_estimators, contamination_override=args.contamination
+    output = run_anomaly_detection(
+        records,
+        random_state=args.random_state,
+        n_estimators=args.n_estimators,
+        contamination_override=args.contamination,
     )
 
+    threshold_report = output["threshold_selection"]
     if args.contamination is not None:
         print(f"[phase2] using manual override contamination={args.contamination}")
     else:
@@ -187,10 +230,7 @@ def main():
         if "discrepancy_warning" in threshold_report:
             print(f"[phase2] WARNING: {threshold_report['discrepancy_warning']}")
 
-    print("[phase2] building findings...")
-    findings = build_findings(records, X, anomaly_scores, is_anomaly)
-
-    eval_result = evaluate_against_ground_truth(records, is_anomaly)
+    eval_result = output["evaluation"]
     if eval_result:
         print(f"[phase2] evaluation vs injected ground truth: "
               f"precision={eval_result['precision']} recall={eval_result['recall']} "
@@ -199,25 +239,12 @@ def main():
     else:
         print("[phase2] no ground truth available -- skipping evaluation")
 
-    output = {
-        "findings": findings,
-        "evaluation": eval_result,
-        "threshold_selection": threshold_report,
-        "config": {
-            "n_estimators": args.n_estimators,
-            "random_state": args.random_state,
-            "manual_contamination_override": args.contamination,
-        },
-    }
-
-    print("[phase2] validating output against schema...")
-    validate_output(output)  # raises loudly on malformed output, same discipline as phase 1
-
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w") as f:
         json.dump(output, f, indent=2)
 
-    n_flagged = int(np.asarray(is_anomaly).sum())
+    findings = output["findings"]
+    n_flagged = sum(1 for f in findings if f["is_anomaly"])
     print(f"[phase2] flagged {n_flagged}/{len(records)} records "
           f"({n_flagged/len(records):.1%}), wrote {args.output}")
 

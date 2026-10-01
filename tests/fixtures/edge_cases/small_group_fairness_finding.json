@@ -1,0 +1,19 @@
+{
+  "attribute": "race",
+  "selection_rates": {
+    "Amer-Indian-Eskimo": 0.117,
+    "Asian-Pac-Islander": 0.273,
+    "Black": 0.125,
+    "Other": 0.123,
+    "White": 0.262
+  },
+  "disparate_impact_ratio": 0.446,
+  "disparate_impact_violation": true,
+  "demographic_parity_difference": 0.156,
+  "demographic_parity_p_value": 0.001,
+  "demographic_parity_violation": true,
+  "equalized_odds_difference": 0.134,
+  "equalized_odds_p_value": 0.001,
+  "equalized_odds_violation": true,
+  "small_group_warning": ["Other"]
+}
