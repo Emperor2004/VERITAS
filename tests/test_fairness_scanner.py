@@ -9,6 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from fairlearn.metrics import demographic_parity_difference, equalized_odds_difference
 from pydantic import ValidationError
 
 from src.fairness_scanner.thresholds import (
@@ -120,6 +121,38 @@ def test_permutation_test_reports_monte_carlo_standard_error():
     )
     assert "p_value_monte_carlo_se" in result
     assert result["p_value_monte_carlo_se"] >= 0
+
+
+@pytest.mark.parametrize(
+    "metric_fn",
+    [demographic_parity_difference, equalized_odds_difference],
+)
+def test_fairlearn_permutation_fast_path_matches_reference(metric_fn):
+    y_true = np.array([1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0])
+    y_pred = np.array([1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1])
+    sensitive = np.array(["A"] * 4 + ["B"] * 4 + ["C"] * 4)
+    n_permutations = 37
+    random_state = 23
+    observed = metric_fn(y_true, y_pred, sensitive_features=sensitive)
+
+    rng = np.random.default_rng(random_state)
+    null_values = [
+        metric_fn(y_true, y_pred, sensitive_features=rng.permutation(sensitive))
+        for _ in range(n_permutations)
+    ]
+    expected_p_value = np.mean(np.asarray(null_values) >= observed)
+
+    result = permutation_significance_test(
+        metric_fn,
+        y_true,
+        y_pred,
+        sensitive,
+        observed,
+        n_permutations=n_permutations,
+        random_state=random_state,
+    )
+
+    assert result["p_value"] == pytest.approx(round(expected_p_value, 4))
 
 
 # ---- metrics.py: build_frame fail-loud contract -------------------------------

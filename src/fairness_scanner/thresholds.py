@@ -14,6 +14,69 @@ from __future__ import annotations
 from typing import Callable, Dict, List
 
 import numpy as np
+import pandas as pd
+
+
+def _fairlearn_permutation_values(
+    metric_name: str,
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    sensitive: np.ndarray,
+    n_permutations: int,
+    rng: np.random.Generator,
+) -> np.ndarray | None:
+    """Compute Fairlearn's binary-label difference metrics in batches."""
+    if not np.all(np.isin(y_true, [0, 1])) or not np.all(np.isin(y_pred, [0, 1])):
+        return None
+
+    group_codes, groups = pd.factorize(sensitive, sort=False, use_na_sentinel=False)
+    group_count = len(groups)
+    row_count = len(y_true)
+    batch_size = max(1, min(128, 1_000_000 // row_count))
+    positive_predictions = y_pred == 1
+    values = np.empty(n_permutations, dtype=float)
+
+    for start in range(0, n_permutations, batch_size):
+        batch_count = min(batch_size, n_permutations - start)
+        shuffled_codes = np.stack([rng.permutation(group_codes) for _ in range(batch_count)])
+        keys = (np.arange(batch_count)[:, None] * group_count + shuffled_codes).ravel()
+        output_size = batch_count * group_count
+
+        if metric_name == "demographic_parity_difference":
+            counts = np.bincount(keys, minlength=output_size).reshape(batch_count, group_count)
+            selected = np.bincount(
+                keys,
+                weights=np.broadcast_to(positive_predictions, (batch_count, row_count)).ravel(),
+                minlength=output_size,
+            ).reshape(batch_count, group_count)
+            rates = selected / counts
+            batch_values = rates.max(axis=1) - rates.min(axis=1)
+        else:
+            rate_differences = []
+            for label in (0, 1):
+                label_mask = y_true == label
+                denominators = np.bincount(
+                    keys,
+                    weights=np.broadcast_to(label_mask, (batch_count, row_count)).ravel(),
+                    minlength=output_size,
+                ).reshape(batch_count, group_count)
+                numerators = np.bincount(
+                    keys,
+                    weights=np.broadcast_to(positive_predictions & label_mask, (batch_count, row_count)).ravel(),
+                    minlength=output_size,
+                ).reshape(batch_count, group_count)
+                rates = np.divide(
+                    numerators,
+                    denominators,
+                    out=np.zeros((batch_count, group_count)),
+                    where=denominators != 0,
+                )
+                rate_differences.append(rates.max(axis=1) - rates.min(axis=1))
+            batch_values = np.maximum(rate_differences[0], rate_differences[1])
+
+        values[start : start + batch_count] = batch_values
+
+    return values
 
 
 def evaluate_disparate_impact(disparate_impact_ratio: float, threshold: float) -> bool:
@@ -77,10 +140,23 @@ def permutation_significance_test(
     y_true_arr = np.asarray(y_true)
     y_pred_arr = np.asarray(y_pred)
 
-    null_values = np.empty(n_permutations)
-    for i in range(n_permutations):
-        shuffled = rng.permutation(sensitive_arr)
-        null_values[i] = metric_fn(y_true_arr, y_pred_arr, sensitive_features=shuffled)
+    metric_name = getattr(metric_fn, "__name__", "")
+    metric_module = getattr(metric_fn, "__module__", "")
+    if metric_module.startswith("fairlearn.metrics") and metric_name in {
+        "demographic_parity_difference",
+        "equalized_odds_difference",
+    }:
+        null_values = _fairlearn_permutation_values(
+            metric_name, y_true_arr, y_pred_arr, sensitive_arr, n_permutations, rng
+        )
+    else:
+        null_values = None
+
+    if null_values is None:
+        null_values = np.empty(n_permutations)
+        for i in range(n_permutations):
+            shuffled = rng.permutation(sensitive_arr)
+            null_values[i] = metric_fn(y_true_arr, y_pred_arr, sensitive_features=shuffled)
 
     p_value = float(np.mean(null_values >= observed_value))
     # Monte Carlo standard error on the p-value estimate itself -- reported
