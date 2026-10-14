@@ -4,31 +4,269 @@
 <meta charset="UTF-8">
 <title>VERITAS Audit Report</title>
 <style>
-  body { font-family: Georgia, 'Times New Roman', serif; max-width: 900px; margin: 2rem auto;
-         padding: 0 1.5rem; color: #1a1a1a; line-height: 1.5; }
-  h1 { border-bottom: 3px solid #1a1a1a; padding-bottom: 0.4rem; }
-  h2 { margin-top: 2.5rem; border-bottom: 1px solid #ccc; padding-bottom: 0.2rem; }
-  .meta { color: #555; font-size: 0.9rem; margin-bottom: 2rem; }
-  table { width: 100%; border-collapse: collapse; margin: 1rem 0 2rem; font-size: 0.92rem; }
-  th, td { border: 1px solid #ccc; padding: 0.5rem 0.6rem; text-align: left; vertical-align: top; }
-  th { background: #f2f2f2; }
-  .violation-row { background: #fdecea; }
-  .informational-row { background: #fafafa; }
-  .control-id { font-weight: bold; white-space: nowrap; }
-  .summary-grid { display: flex; gap: 2rem; margin: 1rem 0 2rem; }
-  .summary-box { border: 1px solid #ccc; padding: 0.8rem 1.2rem; border-radius: 4px; }
-  .summary-box .n { font-size: 1.8rem; font-weight: bold; display: block; }
-  .scope-note { background: #f2f2f2; border-left: 4px solid #555; padding: 1rem 1.2rem; margin-top: 3rem; font-size: 0.9rem; }
-  .caveat { color: #a04000; font-style: italic; }
+  :root {
+    color-scheme: light;
+    --ink: #182230;
+    --muted: #667085;
+    --line: #e3e8ef;
+    --paper: #ffffff;
+    --canvas: #f4f6fa;
+    --navy: #172b4d;
+    --blue: #4569d4;
+    --blue-soft: #edf2ff;
+    --red: #b42318;
+    --red-soft: #fff1f0;
+    --amber: #8a4b08;
+    --amber-soft: #fff7e8;
+    --shadow: 0 12px 34px rgba(23, 43, 77, .07);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 48px 28px 64px;
+    color: var(--ink);
+    background:
+      radial-gradient(ellipse at 8% 0%, rgba(69, 105, 212, .09), transparent 34rem),
+      var(--canvas);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: 4px;
+    z-index: 10;
+    background: linear-gradient(90deg, #263f79, #6486e8, #9ab7ff);
+  }
+
+  h1, h2 { color: var(--navy); letter-spacing: -.035em; }
+  h1 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: clamp(2rem, 4vw, 3rem);
+    line-height: 1.12;
+    font-weight: 750;
+  }
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 42px 0 16px;
+    padding: 0 0 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 1.18rem;
+    letter-spacing: -.02em;
+  }
+  h2::before {
+    content: "";
+    width: 4px;
+    height: 21px;
+    flex: 0 0 4px;
+    border-radius: 99px;
+    background: var(--blue);
+  }
+
+  body > h1, body > .meta { position: relative; z-index: 1; }
+  body > h1 {
+    padding: 34px 38px 8px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: var(--shadow);
+  }
+  .meta {
+    margin: 0 0 30px;
+    padding: 4px 38px 30px;
+    color: var(--muted);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0 0 18px 18px;
+    box-shadow: var(--shadow);
+    font-size: .9rem;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin: 18px 0 30px;
+  }
+  .summary-box {
+    position: relative;
+    overflow: hidden;
+    min-height: 126px;
+    padding: 20px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 4px 16px rgba(23, 43, 77, .035);
+    color: var(--muted);
+    font-size: .84rem;
+    font-weight: 550;
+    transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+    animation: rise-in .55s both;
+  }
+  .summary-box:nth-child(2) { animation-delay: 70ms; }
+  .summary-box:nth-child(3) { animation-delay: 140ms; }
+  .summary-box:nth-child(4) { animation-delay: 210ms; }
+  .summary-box::after {
+    content: "";
+    position: absolute;
+    width: 90px;
+    height: 90px;
+    right: -34px;
+    top: -38px;
+    border-radius: 50%;
+    background: var(--blue-soft);
+    opacity: .9;
+    transition: transform .25s ease;
+  }
+  .summary-box:hover {
+    transform: translateY(-4px);
+    border-color: #bdcbf5;
+    box-shadow: 0 14px 28px rgba(23, 43, 77, .10);
+  }
+  .summary-box:hover::after { transform: scale(1.28); }
+  .summary-box .n {
+    position: relative;
+    z-index: 1;
+    display: block;
+    margin-bottom: 10px;
+    color: var(--navy);
+    font-size: 2.1rem;
+    font-weight: 760;
+    line-height: 1.1;
+    letter-spacing: -.05em;
+    font-variant-numeric: tabular-nums;
+  }
+  .summary-box:first-child .n { color: var(--red); }
+  .summary-box:first-child::after { background: var(--red-soft); }
+  .summary-box:nth-child(2)::after { background: #eef8f2; }
+  .summary-box:nth-child(3)::after { background: #fff7e8; }
+
+  table {
+    width: 100%;
+    margin: 18px 0 30px;
+    border: 1px solid var(--line);
+    border-spacing: 0;
+    border-collapse: separate;
+    border-radius: 13px;
+    overflow: hidden;
+    background: var(--paper);
+    box-shadow: 0 5px 20px rgba(23, 43, 77, .04);
+    font-size: .875rem;
+    line-height: 1.6;
+  }
+  th, td {
+    padding: 13px 15px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    color: #475467;
+    background: #f7f9fc;
+    font-size: .72rem;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: .065em;
+  }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr, table tr:not(:first-child) {
+    transition: background-color .18s ease, box-shadow .18s ease;
+  }
+  tbody tr:hover, table tr:not(:first-child):hover { background-color: #f6f8ff; }
+  .violation-row { background: var(--red-soft); }
+  .violation-row:hover { background: #ffe6e3 !important; }
+  .informational-row { background: #fff; }
+  .control-id {
+    display: inline-block;
+    margin: 1px 2px 3px 0;
+    padding: 2px 7px;
+    border: 1px solid #d7e0f7;
+    border-radius: 5px;
+    background: var(--blue-soft);
+    color: #294b9b;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .scope-note {
+    position: relative;
+    margin-top: 38px;
+    padding: 22px 24px 22px 28px;
+    border: 1px solid #e2e7f0;
+    border-left: 4px solid #7488b5;
+    border-radius: 12px;
+    background: #eef2f8;
+    color: #475467;
+    font-size: .88rem;
+    line-height: 1.75;
+  }
+  .scope-note strong { color: #263b61; }
+  .caveat { color: var(--amber); font-style: italic; }
+
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(9px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 800px) {
+    body { padding: 28px 16px 44px; }
+    body > h1 { padding: 26px 24px 8px; }
+    .meta { padding: 4px 24px 24px; }
+    .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    table { display: block; overflow-x: auto; white-space: normal; }
+    th, td { min-width: 120px; }
+    th:last-child, td:last-child { min-width: 220px; }
+  }
+  @media (max-width: 440px) {
+    body { padding: 20px 10px 32px; }
+    .summary-grid { grid-template-columns: 1fr 1fr; }
+    .summary-box { min-height: 112px; padding: 15px; }
+    .summary-box .n { font-size: 1.75rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: .01ms !important;
+    }
+  }
+
+  @media print {
+    body { max-width: none; padding: 0; background: white; }
+    body::before { display: none; }
+    body > h1, .meta, .summary-box, table { box-shadow: none; }
+    body > h1 { border-radius: 10px 10px 0 0; }
+    .meta { border-radius: 0 0 10px 10px; }
+    .summary-box { break-inside: avoid; }
+    table { break-inside: auto; font-size: 9pt; }
+    tr { break-inside: avoid; }
+    .scope-note { break-inside: avoid; }
+  }
 </style>
 </head>
 <body>
 
-<h1>VERITAS Audit Report</h1>
+<h1>VERITAS <span style="font-weight:450; color:#4569d4;">Audit Report</span></h1>
 <div class="meta">Generated {{ generated_at }} &middot; {{ summary.total }} findings mapped</div>
 
 <h2>Summary</h2>
-<div class="summary-grid">
+<div class="summary-grid" aria-label="Audit summary metrics">
   <div class="summary-box"><span class="n">{{ summary.by_severity_tier.violation }}</span>Violation-tier findings</div>
   <div class="summary-box"><span class="n">{{ summary.by_severity_tier.informational }}</span>Informational findings</div>
   <div class="summary-box"><span class="n">{{ summary.by_finding_type.get('anomaly_finding', 0) }}</span>Anomaly findings</div>
@@ -37,9 +275,11 @@
 
 <h2>Violation-tier findings ({{ summary.violation_findings|length }})</h2>
 {% if summary.violation_findings %}
-<table>
-  <tr><th>Finding type</th><th>Metric</th><th>Value</th><th>NIST controls</th><th>Explanation</th></tr>
+<table aria-label="Audit findings">
+  <thead><tr><th>Finding type</th><th>Metric</th><th>Value</th><th>NIST controls</th><th>Explanation</th></tr>
   {% for f in summary.violation_findings %}
+  </thead>
+  <tbody>
   <tr class="violation-row">
     <td>{{ f.finding_type }}</td>
     <td>{{ f.metric_name or "—" }}</td>
@@ -48,15 +288,18 @@
     <td>{{ f.trigger_explanation }}</td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
 {% else %}
 <p>No violation-tier findings in this run.</p>
 {% endif %}
 
 <h2>Informational findings ({{ summary.informational_findings|length }})</h2>
-<table>
-  <tr><th>Finding type</th><th>Metric</th><th>Value</th><th>NIST controls</th><th>Explanation</th></tr>
+<table aria-label="Informational audit findings">
+  <thead><tr><th>Finding type</th><th>Metric</th><th>Value</th><th>NIST controls</th><th>Explanation</th></tr>
   {% for f in summary.informational_findings %}
+  </thead>
+  <tbody>
   <tr class="informational-row">
     <td>{{ f.finding_type }}</td>
     <td>{{ f.metric_name or "—" }}</td>
@@ -65,6 +308,7 @@
     <td>{{ f.trigger_explanation }}</td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
 
 <div class="scope-note">
