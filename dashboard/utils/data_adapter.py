@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime
 from typing import Any, Dict, Iterable, List
@@ -26,16 +27,57 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _coerce_binary_label(value: Any, *, field_name: str) -> int:
+    if pd.isna(value):
+        raise ValueError(f"{field_name} contains missing values; binary labels must be 0/1 or true/false.")
+
+    if isinstance(value, bool):
+        return int(value)
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number = float(value)
+        if number in {0.0, 1.0}:
+            return int(number)
+        raise ValueError(f"{field_name} must be binary (0/1 or true/false), but received {value!r}.")
+
+    if isinstance(value, str):
+        cleaned = value.strip().lower()
+        if cleaned in {"0", "1", "false", "true", "no", "yes", "n", "y", "negative", "positive"}:
+            return 0 if cleaned in {"0", "false", "no", "n", "negative"} else 1
+        if cleaned in {"0.0", "1.0"}:
+            return int(float(cleaned))
+
+    raise ValueError(f"{field_name} must be binary (0/1 or true/false), but received {value!r}.")
+
+
+def _canonicalize_column_name(name: Any) -> str:
+    normalized = str(name).strip().lower()
+    normalized = re.sub(r"[\s\-]+", "_", normalized)
+    normalized = re.sub(r"_+", "_", normalized)
+    return normalized.strip("_")
+
+
+def _normalize_uploaded_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+
+    df = df.copy()
+    df.columns = [_canonicalize_column_name(col) for col in df.columns]
+    return df
+
+
 def _find_column(df: pd.DataFrame, candidate_names: Iterable[str]) -> str | None:
-    lowered = {str(c).lower(): c for c in df.columns}
+    lowered = {_canonicalize_column_name(c): c for c in df.columns}
     for name in candidate_names:
-        if name.lower() in lowered:
-            return lowered[name.lower()]
+        normalized_name = _canonicalize_column_name(name)
+        if normalized_name in lowered:
+            return lowered[normalized_name]
     return None
 
 
 def validate_uploaded_dataframe(df: pd.DataFrame) -> None:
     """Reject malformed uploads before the analytics pipeline starts."""
+    df = _normalize_uploaded_columns(df)
     if df is None or df.empty:
         raise ValueError("Uploaded file is empty. Please provide a non-empty CSV or XLSX file.")
 
@@ -52,8 +94,10 @@ def validate_uploaded_dataframe(df: pd.DataFrame) -> None:
         "true_label", "actual_label", "ground_truth", "label", "target", "actual", "outcome",
     ]
 
-    has_prediction_signal = _find_column(df, required_signal) is not None
-    has_truth_signal = _find_column(df, required_truth) is not None
+    prediction_col = _find_column(df, required_signal)
+    truth_col = _find_column(df, required_truth)
+    has_prediction_signal = prediction_col is not None
+    has_truth_signal = truth_col is not None
 
     if not has_prediction_signal:
         raise ValueError(
@@ -64,6 +108,15 @@ def validate_uploaded_dataframe(df: pd.DataFrame) -> None:
         raise ValueError(
             "Missing outcome/ground-truth column. Please include a true_label, actual, or target column for fairness evaluation."
         )
+
+    try:
+        for col in [prediction_col, truth_col]:
+            if col is not None:
+                _ = pd.Series(df[col]).map(lambda v: _coerce_binary_label(v, field_name=col))
+    except ValueError as exc:
+        raise ValueError(
+            f"Binary classification columns must use 0/1 or true/false values; {exc}"
+        ) from exc
 
     protected_candidates = [
         "sex", "gender", "race", "demographic_group", "group", "region", "protected_group", "segment",
@@ -148,6 +201,7 @@ def _extract_protected_attributes(row: pd.Series) -> Dict[str, str]:
 
 
 def normalize_uploaded_dataframe(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    df = _normalize_uploaded_columns(df)
     validate_uploaded_dataframe(df)
 
     if is_already_normalized(df):
@@ -203,9 +257,7 @@ def normalize_uploaded_dataframe(df: pd.DataFrame) -> List[Dict[str, Any]]:
             else:
                 predicted_value = 0
 
-        predicted_label = _safe_int(predicted_value)
-        if predicted_label not in {0, 1}:
-            predicted_label = 1 if predicted_label > 0 else 0
+        predicted_label = _coerce_binary_label(predicted_value, field_name="prediction")
 
         confidence_value = row[confidence_col] if confidence_col else None
         prediction_confidence = _safe_float(confidence_value, 0.5)
@@ -213,9 +265,7 @@ def normalize_uploaded_dataframe(df: pd.DataFrame) -> List[Dict[str, Any]]:
             prediction_confidence = 0.5
 
         true_label_value = row[true_label_col] if true_label_col else predicted_label
-        true_label = _safe_int(true_label_value, predicted_label)
-        if true_label not in {0, 1}:
-            true_label = 1 if true_label > 0 else 0
+        true_label = _coerce_binary_label(true_label_value, field_name="ground_truth")
 
         protected = _extract_protected_attributes(row)
 

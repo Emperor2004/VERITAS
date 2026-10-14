@@ -73,6 +73,39 @@ def test_build_summary_reports_aggregate_counts():
     assert summary["mapped_violation_count"] + summary["mapped_informational_count"] == summary["total_findings"]
 
 
+def test_validate_uploaded_dataframe_accepts_whitespace_and_case_variants_in_columns():
+    df = pd.DataFrame(
+        {
+            " Record ID ": ["r1", "r2"],
+            " Timestamp ": ["2026-01-01T10:00:00", "2026-01-02T11:00:00"],
+            " Sex ": ["Male", "Female"],
+            " Prediction ": [1, 0],
+            " ACTUAL ": [1, 0],
+            "Feature A": [5.1, 4.3],
+            "Feature B": [2.2, 9.1],
+        }
+    )
+
+    validate_uploaded_dataframe(df)
+
+
+def test_validate_uploaded_dataframe_rejects_non_binary_label_values():
+    bad_df = pd.DataFrame(
+        {
+            "record_id": ["r1", "r2"],
+            "timestamp": ["2026-01-01T10:00:00", "2026-01-02T11:00:00"],
+            "sex": ["Male", "Female"],
+            "prediction": ["approve", "deny"],
+            "actual": ["approve", "deny"],
+            "feature_a": [5.1, 4.3],
+            "feature_b": [2.2, 9.1],
+        }
+    )
+
+    with pytest.raises(ValueError, match="binary|0/1|true/false"):
+        validate_uploaded_dataframe(bad_df)
+
+
 def test_validate_uploaded_dataframe_rejects_missing_protected_attribute():
     bad_df = pd.DataFrame(
         {
