@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Dict, List
+
+import yaml
+
+from src.anomaly_detection.isolation_forest import run_anomaly_detection
+from src.compliance_mapping.run_mapping import run_mapping
+from src.compliance_mapping.rules_engine import load_lookup_table
+from src.fairness_scanner.run_scan import run_fairness_scan
+from src.report_generator.html_report import render_html_report
+
+ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = ROOT.parent
+CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
+LOOKUP_PATH = PROJECT_ROOT / "src" / "compliance_mapping" / "nist_control_lookup.yaml"
+
+
+def load_project_config() -> Dict[str, Any]:
+    with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
+
+def run_veritas_on_records(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    config = load_project_config()
+    anomaly_output = run_anomaly_detection(
+        records,
+        random_state=config["anomaly_detection"]["isolation_forest"]["random_state"],
+        n_estimators=config["anomaly_detection"]["isolation_forest"]["n_estimators"],
+    )
+    fairness_output = run_fairness_scan(records, config)
+    lookup = load_lookup_table(LOOKUP_PATH)
+    mapped_findings = run_mapping(anomaly_output["findings"], fairness_output["findings"], lookup)
+    report_html = render_html_report(mapped_findings)
+
+    return {
+        "anomaly": anomaly_output,
+        "fairness": fairness_output,
+        "mapped_findings": mapped_findings,
+        "report_html": report_html,
+    }
+
+
+def build_summary(results: Dict[str, Any]) -> Dict[str, Any]:
+    anomaly_findings = results["anomaly"]["findings"]
+    fairness_findings = results["fairness"]["findings"]
+    mapped_findings = results["mapped_findings"]
+
+    anomaly_total = sum(1 for item in anomaly_findings if item["is_anomaly"])
+    fairness_violations = sum(
+        1 for item in fairness_findings if item["disparate_impact_violation"] or item["demographic_parity_violation"] or item["equalized_odds_violation"]
+    )
+    violation_count = sum(1 for item in mapped_findings if item["severity_tier"] == "violation")
+    informational_count = sum(1 for item in mapped_findings if item["severity_tier"] == "informational")
+
+    return {
+        "anomaly_total": anomaly_total,
+        "fairness_violations": fairness_violations,
+        "mapped_violation_count": violation_count,
+        "mapped_informational_count": informational_count,
+        "total_findings": len(mapped_findings),
+    }
