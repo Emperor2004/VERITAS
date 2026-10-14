@@ -258,6 +258,29 @@
     tr { break-inside: avoid; }
     .scope-note { break-inside: avoid; }
   }
+
+  .findings-table .finding-extra { display: none; }
+  .findings-table.is-expanded .finding-extra { display: table-row; }
+  .findings-actions {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin: -12px 0 30px; color: var(--muted); font-size: .85rem;
+  }
+  .see-more-button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 9px 15px; border: 1px solid #d7e0f7; border-radius: 9px;
+    background: #fff; color: #294b9b; font: inherit; font-weight: 650;
+    cursor: pointer; box-shadow: 0 2px 7px rgba(23, 43, 77, .04);
+    transition: transform .18s ease, background-color .18s ease, box-shadow .18s ease;
+  }
+  .see-more-button:hover { transform: translateY(-1px); background: #f4f7ff; box-shadow: 0 7px 16px rgba(23, 43, 77, .09); }
+  .see-more-button:focus-visible { outline: 3px solid rgba(69, 105, 212, .35); outline-offset: 3px; }
+  .findings-actions[hidden], .see-more-button[hidden] { display: none !important; }
+  @media print {
+    .findings-table .finding-extra { display: table-row !important; }
+    .findings-actions { display: none !important; }
+  }
+  @media (prefers-reduced-motion: reduce) { .see-more-button { transition: none; } }
+
 </style>
 </head>
 <body>
@@ -275,12 +298,12 @@
 
 <h2>Violation-tier findings ({{ summary.violation_findings|length }})</h2>
 {% if summary.violation_findings %}
-<table aria-label="Audit findings">
+<table class="findings-table" data-initial-visible="3" aria-label="Audit findings">
   <thead><tr><th>Finding type</th><th>Metric</th><th>Value</th><th>NIST controls</th><th>Explanation</th></tr>
   {% for f in summary.violation_findings %}
   </thead>
   <tbody>
-  <tr class="violation-row">
+  <tr class="violation-row{% if loop.index > 3 %} finding-extra{% endif %}">
     <td>{{ f.finding_type }}</td>
     <td>{{ f.metric_name or "—" }}</td>
     <td>{{ "%.4f"|format(f.observed_value) }}</td>
@@ -290,17 +313,21 @@
   {% endfor %}
   </tbody>
 </table>
+<div class="findings-actions" data-findings-actions>
+  <span data-findings-count aria-live="polite">Showing the first 3 findings.</span>
+  <button class="see-more-button" type="button" data-see-more aria-expanded="false">See More <span aria-hidden="true">↓</span></button>
+</div>
 {% else %}
 <p>No violation-tier findings in this run.</p>
 {% endif %}
 
 <h2>Informational findings ({{ summary.informational_findings|length }})</h2>
-<table aria-label="Informational audit findings">
+<table class="findings-table" data-initial-visible="3" aria-label="Informational audit findings">
   <thead><tr><th>Finding type</th><th>Metric</th><th>Value</th><th>NIST controls</th><th>Explanation</th></tr>
   {% for f in summary.informational_findings %}
   </thead>
   <tbody>
-  <tr class="informational-row">
+  <tr class="informational-row{% if loop.index > 3 %} finding-extra{% endif %}">
     <td>{{ f.finding_type }}</td>
     <td>{{ f.metric_name or "—" }}</td>
     <td>{{ "%.4f"|format(f.observed_value) }}</td>
@@ -310,6 +337,11 @@
   {% endfor %}
   </tbody>
 </table>
+
+<div class="findings-actions" data-findings-actions>
+  <span data-findings-count aria-live="polite">Showing the first 3 findings.</span>
+  <button class="see-more-button" type="button" data-see-more aria-expanded="false">See More <span aria-hidden="true">↓</span></button>
+</div>
 
 <div class="scope-note">
   <strong>Scope of this report:</strong> VERITAS automates evidence generation for the NIST AI RMF
@@ -322,6 +354,43 @@
   cutoff currently exists for the anomaly detector, so anomaly findings never escalate to
   MANAGE (see project documentation for the reasoning).
 </div>
+
+
+<script>
+(function () {
+  document.querySelectorAll('.findings-table').forEach(function (table) {
+    const action = table.nextElementSibling;
+    if (!action || !action.matches('[data-findings-actions]')) return;
+    const button = action.querySelector('[data-see-more]');
+    const label = action.querySelector('[data-findings-count]');
+    const initial = Number(table.dataset.initialVisible || 3);
+    const total = table.querySelectorAll('tbody tr').length;
+    const visible = Math.min(initial, total);
+
+    if (total <= initial) {
+      action.hidden = true;
+      if (label) label.textContent = 'Showing all ' + total + ' findings.';
+      return;
+    }
+
+    function update(expanded) {
+      table.classList.toggle('is-expanded', expanded);
+      button.setAttribute('aria-expanded', String(expanded));
+      button.innerHTML = expanded
+        ? 'See Less <span aria-hidden="true">↑</span>'
+        : 'See More <span aria-hidden="true">↓</span>';
+      if (label) label.textContent = expanded
+        ? 'Showing all ' + total + ' findings.'
+        : 'Showing ' + visible + ' of ' + total + ' findings.';
+    }
+
+    update(false);
+    button.addEventListener('click', function () {
+      update(button.getAttribute('aria-expanded') !== 'true');
+    });
+  });
+})();
+</script>
 
 </body>
 </html>

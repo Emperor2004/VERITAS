@@ -99,9 +99,10 @@ def test_write_html_report_end_to_end(tmp_path):
     write_html_report(input_path, output_path)
 
     assert output_path.exists()
-    content = output_path.read_text()
+    content = output_path.read_text(encoding="utf-8")
     assert "VERITAS Audit Report" in content
     assert "disparate_impact_ratio" in content
+    assert "\u2193" in content
 
 
 # ---- pdf_report.py -----------------------------------------------------------

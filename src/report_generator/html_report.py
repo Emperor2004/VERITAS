@@ -61,5 +61,5 @@ def render_html_report(findings: List[Dict[str, Any]], generated_at: datetime = 
 def write_html_report(input_path, output_path) -> None:
     findings = load_mapped_findings(input_path)
     html = render_html_report(findings)
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
