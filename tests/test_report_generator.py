@@ -4,6 +4,7 @@ Phase 5 (report_generator) test suite.
 from __future__ import annotations
 
 import json
+import sys
 
 import pytest
 
@@ -105,6 +106,24 @@ def test_write_html_report_end_to_end(tmp_path):
     assert "\u2193" in content
 
 
+def test_report_cli_generates_html_and_optional_pdf(tmp_path, monkeypatch):
+    from src.report_generator.run_report import main
+
+    input_path = tmp_path / "mapped_findings.json"
+    input_path.write_text(json.dumps({"mapped_findings": _sample_findings()}), encoding="utf-8")
+    html_path = tmp_path / "audit_report.html"
+    pdf_path = tmp_path / "audit_report.pdf"
+    monkeypatch.setattr(sys, "argv", [
+        "run_report", "--input", str(input_path), "--output", str(html_path),
+        "--pdf-output", str(pdf_path),
+    ])
+
+    main()
+
+    assert html_path.exists()
+    assert pdf_path.read_bytes().startswith(b"%PDF-")
+
+
 # ---- pdf_report.py -----------------------------------------------------------
 
 def test_check_weasyprint_available_returns_bool_and_message():
@@ -115,14 +134,24 @@ def test_check_weasyprint_available_returns_bool_and_message():
     assert len(msg) > 0
 
 
-def test_write_pdf_report_handles_missing_runtime_gracefully(tmp_path):
-    from src.report_generator.pdf_report import check_weasyprint_available, write_pdf_report
-    is_avail, _ = check_weasyprint_available()
+def test_write_pdf_report_writes_pdf_with_available_backend(tmp_path):
+    from src.report_generator.pdf_report import write_pdf_report
     out_pdf = tmp_path / "test.pdf"
-    if not is_avail:
-        with pytest.raises(RuntimeError, match="WeasyPrint is not functional"):
-            write_pdf_report(_sample_findings(), out_pdf)
-    else:
-        success = write_pdf_report(_sample_findings(), out_pdf)
-        assert success is True
-        assert out_pdf.exists()
+    success = write_pdf_report(_sample_findings(), out_pdf)
+
+    assert success is True
+    assert out_pdf.exists()
+    assert out_pdf.read_bytes().startswith(b"%PDF-")
+
+
+def test_pdf_report_populates_existing_docx_template():
+    from src.report_generator.pdf_report import _populate_report_template
+
+    document = _populate_report_template(_sample_findings())
+
+    assert document.paragraphs[1].text == "Audit Report"
+    assert document.tables[1].rows[0].cells[0].text == "1\nViolation-tier findings"
+    assert len(document.tables[3].rows) == 2
+    assert document.tables[3].rows[1].cells[1].text == "disparate_impact_ratio"
+    assert len(document.tables[5].rows) == 2
+    assert document.tables[5].rows[1].cells[1].text == "Not applicable"

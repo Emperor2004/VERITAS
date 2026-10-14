@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+from streamlit.testing.v1 import AppTest
 
 from dashboard.app import st  # noqa: F401
 from dashboard.services.veritas_runner import build_summary, run_veritas_on_records
@@ -141,3 +142,15 @@ def test_validate_uploaded_dataframe_rejects_empty_or_non_numeric_dataset():
 
     with pytest.raises(ValueError, match="No usable numeric feature"):
         validate_uploaded_dataframe(non_numeric_df)
+
+
+def test_dashboard_displays_html_and_offers_pdf_download_only():
+    app = AppTest.from_file("../dashboard/app.py", default_timeout=30).run()
+    csv_data = _sample_uploaded_df().to_csv(index=False).encode("utf-8")
+
+    app.file_uploader[0].upload("audit.csv", csv_data, "text/csv").run()
+    app.button[0].click().run()
+
+    assert not app.exception
+    download_labels = {element.proto.label for element in app.get("download_button")}
+    assert download_labels == {"Download sample upload template", "Download PDF report"}

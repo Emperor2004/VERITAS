@@ -17,10 +17,10 @@
 | 2 | Anomaly Detection — IsolationForest, data-driven threshold selection, explainability, evaluation | ✅ Built & tested |
 | 3 | Fairness Scanner — Fairlearn metrics, EEOC four-fifths threshold, permutation-test thresholds for demographic parity/equalized odds, small-group safeguards | ✅ Built & tested |
 | 4 | Compliance Mapping Engine (core original contribution) | ✅ Built & tested (CLI & programmatic entrypoints) |
-| 5 | Report Generator (PDF/HTML) | ✅ Built & tested (self-contained HTML + modular PDF with WeasyPrint diagnostics) |
+| 5 | Report Generator (HTML/PDF) | ✅ Built & tested (HTML displayed in the dashboard; PDF generated from the DOCX template) |
 | Orchestrator | Pipeline Orchestration & In-Memory Runner | ✅ Built (`src/orchestrator.py` & `src/pipeline.py`) with SHA-256 manifests |
 
-Phases 1–5 have been run individually and end-to-end as a complete pipeline against the full UCI Adult Income dataset (~45K records after missing-value cleanup), producing real output artifacts in `outputs/`. The pipeline can be executed via CLI subprocess orchestration with SHA-256 integrity manifests or via the unified in-memory pipeline (`VeritasPipeline`).
+Each phase has a standalone CLI. Phases 1–5 can also run through the subprocess orchestrator, which records a SHA-256 manifest, or through the in-memory `VeritasPipeline` API. Generated artifacts are written beneath `outputs/`; keep sensitive or run-specific artifacts out of source control.
 
 ---
 
@@ -46,7 +46,7 @@ Phases 1–5 have been run individually and end-to-end as a complete pipeline ag
 
 ## 1. Overview
 
-VERITAS treats an AI system — specifically a tabular income/lending classifier — as the **subject of an audit**, not the tool performing one. It ingests a stream of prediction-event logs (real UCI Adult Income predictions, wrapped with synthetic operational metadata to resemble a bank's income-prediction service), and runs them through four stages:
+VERITAS treats an AI system — specifically a tabular income/lending classifier — as the **subject of an audit**, not the tool performing one. It ingests prediction-event logs (UCI Adult Income predictions wrapped with synthetic operational metadata) and runs five phases:
 
 1. Detect operational and statistical anomalies in prediction behavior.
 2. Scan for statistical fairness violations across protected groups.
@@ -76,7 +76,7 @@ The system does not certify compliance and does not interact with a production m
 
 ## 3. Architecture
 
-VERITAS is built as four decoupled modules connected by fixed, versioned input/output contracts (JSON schemas), so each module can be developed, tested, and demoed independently.
+VERITAS is organized into five independently runnable phases connected by JSON artifact contracts. Ingestion feeds anomaly detection and fairness scanning; compliance mapping joins those results; report generation renders the mapped findings.
 
 **Dependency graph (not purely sequential):** Anomaly Detection and the Fairness & Bias Scanner both consume `normalized_log.json` directly from ingestion and have no dependency on one another — they run **in parallel**. The Compliance Mapping Engine is the actual join point: it blocks until *both* findings files exist, and must reconcile two structurally different artifact shapes (anomaly findings are per-record; fairness findings are per-protected-attribute aggregates).
 
@@ -105,7 +105,7 @@ VERITAS is built as four decoupled modules connected by fixed, versioned input/o
                           │  mapped_findings.json
                           ▼
                 ┌────────────────────┐
-                │  Report Generator   │  HTML built; PDF pending
+                │  Report Generator   │  HTML + optional PDF
                 └─────────┬───────────┘
                           │
                           ▼
@@ -175,11 +175,18 @@ veritas/
 │       ├── __init__.py
 │       ├── run_report.py           # Phase 5 entrypoint
 │       ├── html_report.py          # renders self-contained HTML report via Jinja2
-│       ├── pdf_report.py           # modular PDF generation with WeasyPrint & environment diagnostics
+│       ├── pdf_report.py           # populates the DOCX template and renders PDF with ReportLab
 │       └── templates/
-│           └── report_template.html
+│           ├── report_template.html
+│           └── report_template.docx # DOCX structure and content used for PDF output
 │
-├── tests/                          # 71 tests across all modules, all passing — see §11
+├── dashboard/                      # Streamlit upload-and-audit interface
+│   ├── app.py
+│   ├── requirements.txt             # Additional dashboard dependencies
+│   ├── services/
+│   └── utils/
+│
+├── tests/                          # 84 tests across all modules — see §11
 │   ├── conftest.py                 # shared fixtures for compliance_mapping tests
 │   ├── test_pipeline.py            # end-to-end in-memory VeritasPipeline tests
 │   ├── test_ingestion.py
@@ -215,7 +222,7 @@ Each module is independently runnable via CLI and callable programmatically via 
 | Schema Validation | `pydantic` | Fail-loud validation at every module boundary (ingestion output, anomaly findings, fairness findings) |
 | Dataset Access | `ucimlrepo` | Fetches and locally caches UCI Adult Income |
 | Compliance Mapping | Custom rules engine (Python, YAML-driven lookup) | Finding → NIST AI RMF control ID translation — core logic built, unit-tested, and CLI-runnable |
-| Report Generation | `python-docx`, HTML/CSS, PDF export | Structured audit evidence output — HTML report built; PDF pending |
+| Report Generation | Jinja2, python-docx, ReportLab | Self-contained HTML view plus a PDF rendered from the existing DOCX report template |
 | Dataset | UCI Adult Income | Real classifier predictions and confidence scores |
 | Compliance Reference | NIST AI RMF | Primary framework for control ID mapping |
 | Fairness Threshold Standard | EEOC four-fifths rule (0.8 ratio) | External, defensible fairness threshold — the only threshold in this project with an external citation so far |
@@ -231,9 +238,14 @@ git clone <repo-url> veritas
 cd veritas
 
 python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+# macOS/Linux
+source .venv/bin/activate
 
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
+# Optional: dependencies for the Streamlit dashboard
+python -m pip install -r dashboard/requirements.txt
 ```
 
 **`requirements.txt`:**
@@ -247,7 +259,7 @@ pydantic>=2.6
 ucimlrepo>=0.0.7
 python-docx>=1.1
 jinja2>=3.1
-weasyprint>=61.0
+reportlab>=4.0
 pytest>=8.0
 ```
 
@@ -321,13 +333,13 @@ anomaly_injection:
 
 ### 8.1 Automated Pipeline Orchestration (`src/orchestrator.py`)
 
-The pipeline orchestrator coordinates Phases 1 through 5, supports dry runs, phase selection, and logs execution evidence into `outputs/logs/run/run_manifest.json` with cryptographic SHA-256 hashes of all inputs and outputs.
+The pipeline orchestrator coordinates Phases 1 through 5, supports dry runs and phase selection, and logs execution evidence into `outputs/logs/run/run_manifest.json` with SHA-256 hashes of all inputs and outputs. Both subprocess and `--in-memory` runs generate `outputs/reports/audit_report.html` and `outputs/reports/audit_report.pdf`.
 
 ```bash
 # 1. Full pipeline run (subprocesses with SHA-256 integrity validation)
 python src/orchestrator.py
 
-# 2. Fast in-memory pipeline run (zero disk I/O bottleneck between phases)
+# 2. In-memory pipeline run (avoids intermediate JSON serialization)
 python src/orchestrator.py --in-memory --limit 1000
 
 # 3. Dry-run: inspect execution plan without executing
@@ -372,8 +384,18 @@ python -m src.fairness_scanner.run_scan --input data/processed/normalized_log.js
 python -m src.compliance_mapping.run_mapping --anomaly-input outputs/logs/anomaly_findings.json --fairness-input outputs/logs/fairness_findings.json --output outputs/logs/mapped_findings.json
 
 # 5. Report generation
-python -m src.report_generator.run_report --input outputs/logs/mapped_findings.json --output outputs/reports/audit_report.html
+python -m src.report_generator.run_report --input outputs/logs/mapped_findings.json --output outputs/reports/audit_report.html --pdf-output outputs/reports/audit_report.pdf
 ```
+
+### 8.4 Streamlit Dashboard
+
+Install the optional dashboard dependencies as shown in §6, then run from the repository root:
+
+```bash
+python -m streamlit run dashboard/app.py
+```
+
+The dashboard accepts CSV and Excel (`.xlsx`/`.xls`) prediction logs. It requires a binary prediction column, a binary actual/ground-truth column, at least one protected-attribute column, and at least one numeric feature. Column names are normalized for case, spaces, and hyphens; common aliases such as `prediction`/`predicted_label`, `actual`/`true_label`, and `gender`/`sex` are accepted. Labels must use supported binary values such as `0`/`1`, true/false, or yes/no. Invalid or missing labels are rejected before analysis. The sidebar provides a downloadable CSV example.
 
 ---
 
@@ -421,12 +443,12 @@ The project's original contribution. Everything above uses off-the-shelf librari
 - **What this module deliberately does NOT do:** GOVERN-function coverage. NIST's GOVERN function (organizational accountability, training, documented risk tolerance) cannot be evidenced by a tool inspecting model outputs — it's the deploying organization's responsibility. VERITAS automates evidence generation for MEASURE and produces citations into MAP and MANAGE; it does not, and structurally cannot, automate GOVERN.
 
 ### 9.5 Report Generator (`src/report_generator/`)
-- Reads `mapped_findings.json` (phase 4 output) and renders a self-contained, static HTML audit report via a Jinja2 template — no external CDN assets or JavaScript required, designed to be portable and diffable.
+- Reads `mapped_findings.json` (phase 4 output) and renders a self-contained HTML audit report via a Jinja2 template. CSS and JavaScript are embedded; there are no external CDN dependencies. JavaScript enables the findings-table “See More” control. Reports are written as UTF-8.
 - `html_report.py` loads findings, produces a summary (counts by severity tier and finding type, separated violation/informational lists), and renders via `templates/report_template.html`.
-- `pdf_report.py` provides modular PDF generation via WeasyPrint, featuring runtime environment checks and informative diagnostics when underlying C-libraries (Pango/Cairo/GObject) are absent on Windows.
+- `pdf_report.py` populates `templates/report_template.docx` with run metadata, summary counts, and finding rows, then renders the template's ordered sections into PDF with ReportLab. The dashboard displays HTML and offers a PDF download; both orchestrator modes write HTML and PDF.
 - The report includes an explicit **scope disclosure**: VERITAS covers MEASURE + MAP/MANAGE citations only; GOVERN coverage is the deploying organization's responsibility. This is rendered in every report, not left implicit.
 - `run_report.py` is the CLI entrypoint, matching the convention of phases 1–4.
-- Output: `audit_report.html` and `audit_report.pdf` in `outputs/reports/`.
+- Output: the orchestrator writes `audit_report.html` and `audit_report.pdf` in `outputs/reports/`; the dashboard generates its template-based PDF download in memory.
 
 ---
 
@@ -447,10 +469,10 @@ Everything above is verified by `tests/test_compliance_mapping.py` (see §11) ag
 
 ## 11. Testing
 
-**An automated `pytest` suite exists: 71 tests across all modules, all passing.**
+**An automated `pytest` suite exists: 84 tests across all modules.**
 
 ```bash
-# Run all 71 tests:
+# Run all tests:
 python -m pytest tests/ -v
 
 # Run one module at a time:
@@ -470,9 +492,9 @@ python -m pytest tests/ -q
 | Pipeline | `test_pipeline.py` | Full in-memory end-to-end execution; `VeritasPipeline` instantiation from config dict and file; verification of record flow across all five phases without disk I/O bottlenecks |
 | Ingestion | `test_ingestion.py` | Schema validation (valid/invalid records, fail-loud on the first bad record in a batch — not a silent drop); anomaly-injection contract (rare auth method + off-hours timestamp, `assign_anomaly_types` multi-pattern weight split, correct ground-truth label); feature engineering (off-hours/rare-auth flag correctness, zero-mean standardization, zero-std divide-by-zero guard); audit-subject model (predictions returned for every row, not just the held-out split; valid label/confidence ranges) |
 | Anomaly Detection | `test_anomaly_detection.py` | Label-leakage guard (`ground_truth_operational_anomaly` / `true_label` must never enter the feature matrix — raises if they do); knee-point threshold determinism and range; grid-search threshold recovery on a manufactured clean separation; evaluation metrics (precision/recall against ground truth); output schema accept/reject |
-| Fairness Scanner | `test_fairness_scanner.py` | EEOC threshold boundary behavior (`<` not `<=`); small-group flagging; fail-loud on missing `true_label`; manufactured disparate-impact detection with known expected ratio; **permutation test**: determinism for a fixed seed, correctly flags a manufactured real disparity, correctly does NOT flag an irrelevant/random sensitive feature, reports a Monte Carlo standard error; output schema accept/reject |
+| Fairness Scanner | `test_fairness_scanner.py` | EEOC threshold boundaries; small-group and missing-label safeguards; manufactured disparate-impact detection; seeded permutation behavior and fast-path equivalence with Fairlearn for demographic parity and equalized odds; output schema validation |
 | Compliance Mapping | `test_compliance_mapping.py` | Happy-path control mapping for both finding types; informational findings never discarded and never escalate; violation findings correctly escalate to MANAGE 1.3/1.4; anomaly findings never escalate (locks in the informational-only design decision); reconciler filters `is_anomaly=False` records out; reconciler unpacks one fairness row into three independent metric findings with correct per-metric severity; every mapped finding carries non-empty matched NIST action text; fail-loud on an unmapped finding type and on a malformed lookup table |
-| Report Generator | `test_report_generator.py` | `load_mapped_findings` fails loudly on wrong JSON key; `summarize` counts by severity tier and finding type correctly; rendered HTML includes both severity sections, GOVERN scope disclosure ("deploying organization"), and handles zero-violation case; end-to-end `write_html_report` file I/O roundtrip; WeasyPrint runtime availability detection and graceful error handling in `write_pdf_report` |
+| Report Generator | `test_report_generator.py` | Input-key validation; summary counts; rendered severity sections and scope disclosure; zero-violation behavior; end-to-end UTF-8 HTML output; PDF signature/output verification |
 
 **What this suite does NOT cover, disclosed rather than assumed away:**
 - **No CI wiring.** Tests are currently run locally via pytest, not yet on automated GitHub Actions pull request triggers.
@@ -490,18 +512,18 @@ python -m pytest tests/ -q
 | Anomaly injection rate (3%) has no external benchmark | **Unresolved.** Chosen as an internal design parameter, not sourced from an industry anomaly base-rate. Now split across three patterns via `type_weights` (§7, §9.1); the per-type split is an additional internal design choice on top of the already-unbenchmarked total. | Must be either justified or explicitly labeled as an experimental parameter in any report |
 | `duplicate_record` anomaly pattern is structurally undetectable by `IsolationForest` | **By design, not a gap.** A density-based detector treats an exact repeat of a common feature vector as more typical, not less — this pattern exists specifically to make that blind spot visible in the evaluation instead of silently absent from it. | State this as a deliberate limitation of the chosen detector family if asked, not as a missed anomaly type |
 | Phase 2's precision/recall evaluation does not yet break down by anomaly type | **Open.** `ground_truth_anomaly_type` is written by phase 1 and validated by the schema, but `isolation_forest.py`'s evaluation still reports a single aggregate precision/recall against the overall `ground_truth_operational_anomaly` bool. | Wire a per-type breakdown before citing detection performance on any individual pattern (especially `duplicate_record`, which should show near-zero recall and is expected to) |
-| Two threshold-selection methods for IsolationForest contamination can disagree substantially | **Resolved as designed, documented as expected behavior, not a bug.** On test data, unsupervised knee-point selected ~10.5% vs supervised grid search's ~3%. This is diagnostic (real numeric outliers exist beyond the injected ones), not an error — but it means the 10.5%-level flagged set has NOT been manually verified for correctness. | Manually inspect non-ground-truth flagged records before citing detector performance |
+| Two threshold-selection methods for IsolationForest contamination can disagree substantially | **Open for interpretation.** The unsupervised knee and supervised grid search can produce very different rates; the pipeline emits a warning, but the discrepancy alone does not establish which threshold is appropriate. | Inspect flagged records and justify the operating threshold before citing detector performance |
 | `config/thresholds.yaml` as a separate file (shown in earlier README drafts and repo trees) | **Resolved — was never actually built.** All configuration, including fairness thresholds, lives in a single `config/config.yaml`. | This README previously misrepresented the repo structure; corrected here |
-| No automated test suite | **Resolved.** 66 tests across all five modules (§11). Not resolved: no orchestrator-level integration test, no CI wiring — see §11's explicit "not covered" list. | Manual verification no longer needed for unit-level regressions; an end-to-end orchestrator integration test is still an open item |
+| No automated test suite | **Resolved.** 84 tests across all five modules (§11). No CI wiring is currently documented. | Continue running the full suite locally; add CI before relying on automated pull-request checks |
 | Prior tech-stack framing implied an "optional LLM assist" path alongside "deterministic rules engine" | **Resolved.** Architecture is stated as deterministic-only throughout this document. | If an LLM-assist path is ever reintroduced, this document and the module diagram must be updated together |
 | Phase 4 was designed against an assumed Phase 2/3 output schema before their real source was reviewed | **Resolved, but worth recording as a process lesson.** `AnomalyFinding` has `is_anomaly: bool`, not a `severity_tier`; Phase 2's findings list includes every record, not just flagged ones; `FairnessFinding` is one row per attribute with all three metrics inline, not per-metric records. `input_reconciler.py` was rewritten against the real schemas after reading the actual source. | Any future module built against an "assumed" contract for an already-built upstream module should be verified against real source before being treated as done |
 | Anomaly findings are permanently `informational` — can never trigger a MANAGE-stage response | **Resolved as an explicit design decision, not a gap.** No externally-defensible anomaly-severity cutoff exists (same reasoning as the unbenchmarked injection rate above); manufacturing one to exercise the MANAGE path would repeat that exact problem. Revisit only if an external anomaly-severity standard is identified. | State this as a deliberate scope boundary if asked, not as an oversight |
 | GOVERN function has zero representation in the codebase | **By design, not a gap.** GOVERN (organizational accountability, training, documented risk tolerance) cannot be evidenced by a tool inspecting model outputs — it is the deploying organization's responsibility. VERITAS's honest scope claim is "automates MEASURE evidence generation, cites into MAP and MANAGE" — not "implements the AI RMF." | Do not claim full RMF coverage in the report or demo |
 | Compliance Mapping Engine has no CLI entrypoint | **Resolved.** `run_mapping.py` provides a CLI entrypoint (`python -m src.compliance_mapping.run_mapping`) matching phases 1–3's conventions. | Closed |
 | Automated Pipeline Orchestrator | **Resolved.** `src/orchestrator.py` provides concurrent subprocess execution with SHA-256 manifests, while `src/pipeline.py` provides the in-memory `VeritasPipeline` for zero-disk-I/O execution. | Closed |
-| PDF Report Generation | **Resolved.** `src/report_generator/pdf_report.py` provides modular PDF generation with WeasyPrint and runtime environment checks. | Closed |
+| PDF Report Generation | **Resolved.** `src/report_generator/pdf_report.py` populates `report_template.docx` and renders its sections and findings to PDF with ReportLab, without requiring native conversion tools. | Closed |
 | Module Documentation & Reference Contracts | **Resolved.** `docs/architecture.md`, `docs/module_contracts.md`, and `docs/nist_mapping_reference.md` are fully written and populated. | Closed |
-| Permutation test performance at full dataset scale is untested | **Partially resolved.** The pipeline has completed against the full ~45K-row dataset, so the permutation test does finish, but it has not been formally benchmarked or profiled. | Formally benchmark before assuming performance guarantees |
+| Permutation test performance at full dataset scale | **Optimized and benchmarked.** Fairlearn's repeated metric-frame construction is replaced by a batched NumPy path for binary demographic-parity and equalized-odds permutations, preserving seeded results. On 45,222 rows, a 100-permutation benchmark measured roughly 115x speedup for demographic parity and 155x for equalized odds. | This is an isolated metric-kernel comparison, not an end-to-end service-level guarantee |
 
 ---
 
@@ -515,14 +537,14 @@ python -m pytest tests/ -q
 - [x] Decide and implement a numeric threshold approach for `demographic_parity_difference` and `equalized_odds_difference` — done via permutation significance test
 - [x] Design and build the Compliance Mapping Engine (phase 4) — core logic and CLI entrypoint built
 - [x] Build the explainability trace from threshold gate through to control ID assignment
-- [x] Write an actual `pytest` suite — 71 tests across all modules
+- [x] Write an actual `pytest` suite — 84 tests across all modules
 - [x] Build a CLI entrypoint for the Compliance Mapping Engine (`python -m src.compliance_mapping.run_mapping`)
 - [x] Build `src/orchestrator.py` with concurrent execution, SHA-256 manifests, and in-memory execution mode
 - [x] Build modular `VeritasPipeline` in `src/pipeline.py` for programmatic invocation
 - [x] Run phases 1–5 sequentially as one pipeline against the real dataset
-- [ ] Benchmark the permutation test's runtime at full dataset scale (formally profile, not just "it completed")
+- [x] Benchmark the optimized permutation metric path on the full 45,222-row normalized dataset (isolated metric-kernel benchmark; see §12)
 - [ ] Decide whether `fairness.significance_level` (0.05 default) is the right value for this specific use case, or whether a stricter value is warranted
-- [x] Build the Report Generator (phase 5) — HTML report and modular PDF export with WeasyPrint diagnostics
+- [x] Build the Report Generator (phase 5) — HTML report and PDF rendered from the DOCX template
 - [x] Populate `docs/nist_mapping_reference.md`, `docs/module_contracts.md`, and `docs/architecture.md`
 - [ ] Consider an end-to-end test approximating MEASURE 2.13 (TEVV process effectiveness) — confirm the pipeline detects a known-bad classifier and does not false-positive on a known-fair one, beyond the current unit-level permutation-test coverage
 

@@ -19,7 +19,7 @@ from src.fairness_scanner.run_scan import run_fairness_scan
 from src.compliance_mapping.run_mapping import run_mapping
 from src.compliance_mapping.rules_engine import load_lookup_table
 from src.report_generator.html_report import render_html_report, write_html_report
-from src.report_generator.pdf_report import write_pdf_report, check_weasyprint_available
+from src.report_generator.pdf_report import write_pdf_report
 
 
 @dataclass
@@ -114,7 +114,7 @@ class VeritasPipeline:
             limit: Optional record count limit for Phase 1.
             save_artifacts: If True, writes JSON logs and report files to output_dir.
             output_dir: Base directory for output artifacts.
-            generate_pdf: If True, attempts to render PDF report via WeasyPrint.
+            generate_pdf: If True, renders a PDF from the DOCX report template.
 
         Returns:
             PipelineArtifacts: Container with all generated in-memory artifacts.
@@ -158,8 +158,6 @@ class VeritasPipeline:
 
         if generate_pdf:
             pdf_dest = reports_dir / "audit_report.pdf"
-            is_avail, _ = check_weasyprint_available()
-            if is_avail:
-                artifacts.report_pdf_generated = write_pdf_report(artifacts.mapped_findings, pdf_dest)
+            artifacts.report_pdf_generated = write_pdf_report(artifacts.mapped_findings, pdf_dest)
 
         return artifacts

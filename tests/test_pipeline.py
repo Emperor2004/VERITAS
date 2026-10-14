@@ -75,3 +75,18 @@ def test_pipeline_in_memory_flow():
 
     html = pipeline.generate_html_report(mapped)
     assert "VERITAS Audit Report" in html
+
+
+def test_run_all_generates_template_pdf_when_requested(tmp_path, monkeypatch):
+    pipeline = VeritasPipeline(config=_mock_pipeline_config())
+    monkeypatch.setattr(pipeline, "run_ingestion", lambda limit=None: [])
+    monkeypatch.setattr(pipeline, "run_anomaly_detection", lambda records: {})
+    monkeypatch.setattr(pipeline, "run_fairness_scan", lambda records: {})
+    monkeypatch.setattr(pipeline, "run_compliance_mapping", lambda anomaly, fairness: [])
+    monkeypatch.setattr(pipeline, "generate_html_report", lambda findings: "<html></html>")
+
+    artifacts = pipeline.run_all(save_artifacts=True, output_dir=tmp_path, generate_pdf=True)
+
+    pdf_path = tmp_path / "reports" / "audit_report.pdf"
+    assert artifacts.report_pdf_generated is True
+    assert pdf_path.read_bytes().startswith(b"%PDF-")

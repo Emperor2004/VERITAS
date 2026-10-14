@@ -9,6 +9,7 @@ import streamlit as st
 
 from dashboard.services.veritas_runner import build_summary, run_veritas_on_records
 from dashboard.utils.data_adapter import normalize_uploaded_dataframe, validate_uploaded_dataframe
+from src.report_generator.pdf_report import render_pdf_report
 
 st.set_page_config(page_title="VERITAS Dashboard", page_icon="🛡️", layout="wide")
 
@@ -82,7 +83,7 @@ if uploaded is not None:
         df = pd.read_excel(uploaded)
 
     st.subheader("Uploaded data preview")
-    st.dataframe(df.head(10), use_container_width=True)
+    st.dataframe(df.head(10), width="stretch")
 
     if run_analysis:
         try:
@@ -108,33 +109,25 @@ if uploaded is not None:
 
             with tab_anomaly:
                 anomaly_df = pd.DataFrame(result["anomaly"]["findings"])
-                st.dataframe(anomaly_df.head(25), use_container_width=True)
+                st.dataframe(anomaly_df.head(25), width="stretch")
 
             with tab_fairness:
                 fairness_df = pd.DataFrame(result["fairness"]["findings"])
-                st.dataframe(fairness_df, use_container_width=True)
+                st.dataframe(fairness_df, width="stretch")
 
             with tab_mapped:
                 mapped_df = pd.DataFrame(result["mapped_findings"])
-                st.dataframe(mapped_df, use_container_width=True)
+                st.dataframe(mapped_df, width="stretch")
 
             with tab_report:
                 report_html = result["report_html"]
-                st.components.v1.html(report_html, height=900, scrolling=True)
-
+                st.html(report_html, width="stretch", unsafe_allow_javascript=True)
                 st.download_button(
-                    label="Download report (.html)",
-                    data=report_html.encode("utf-8"),
-                    file_name="veritas_audit_report.html",
-                    mime="text/html",
-                )
-
-                mapped_json = __import__("json").dumps({"mapped_findings": result["mapped_findings"]}, indent=2, default=str)
-                st.download_button(
-                    label="Download mapped findings (.json)",
-                    data=mapped_json,
-                    file_name="mapped_findings.json",
-                    mime="application/json",
+                    label="Download PDF report",
+                    data=render_pdf_report(result["mapped_findings"]),
+                    file_name="veritas_audit_report.pdf",
+                    mime="application/pdf",
+                    on_click="ignore",
                 )
 
         except Exception as exc:

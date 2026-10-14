@@ -60,6 +60,7 @@ ANOMALY = "outputs/logs/anomaly_findings.json"
 FAIRNESS = "outputs/logs/fairness_findings.json"
 MAPPED = "outputs/logs/mapped_findings.json"
 REPORT = "outputs/reports/audit_report.html"
+REPORT_PDF = "outputs/reports/audit_report.pdf"
 LOOKUP = "src/compliance_mapping/nist_control_lookup.yaml"
 
 # Files whose exact contents determine audit results; hashed into the manifest.
@@ -98,9 +99,10 @@ PIPELINE: list[list[Stage]] = [
     [Stage(
         name="report_generator", phase=5,
         cmd=[PY, "-m", "src.report_generator.run_report",
-             "--input", MAPPED, "--output", REPORT],
+               "--input", MAPPED, "--output", REPORT,
+               "--pdf-output", REPORT_PDF],
         inputs=[MAPPED],
-        outputs=[REPORT],
+           outputs=[REPORT, REPORT_PDF],
     )],
 ]
 
@@ -218,6 +220,7 @@ def main() -> int:
             limit=args.limit,
             save_artifacts=True,
             output_dir=root / "outputs",
+            generate_pdf=True,
         )
         elapsed = round(time.monotonic() - t0, 2)
         print(f"pipeline complete in {elapsed}s; artifacts saved to {root / 'outputs'}")
