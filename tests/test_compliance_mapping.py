@@ -30,6 +30,22 @@ def test_fairness_finding_maps_to_measure_2_11(lookup, sample_fairness_finding_i
     assert "MEASURE 2.11" in control_ids
 
 
+def test_finding_id_is_stable_and_distinguishes_fairness_metrics(
+    lookup, sample_fairness_finding_informational
+):
+    finding = {**sample_fairness_finding_informational, "source_record_id": "race"}
+
+    first = map_finding(finding, lookup)
+    repeated = map_finding(finding, lookup)
+    other_metric = map_finding(
+        {**finding, "metric_name": "equalized_odds_difference"}, lookup
+    )
+
+    assert first.finding_id == repeated.finding_id
+    assert first.finding_id != other_metric.finding_id
+    assert first.to_dict()["finding_id"] == first.finding_id
+
+
 # ---- Sub-threshold / no-silent-discard --------------------------------------
 
 def test_informational_finding_still_produces_output(lookup, sample_fairness_finding_informational):

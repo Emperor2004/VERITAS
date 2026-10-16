@@ -9,8 +9,11 @@ import yaml
 from src.anomaly_detection.isolation_forest import run_anomaly_detection
 from src.compliance_mapping.run_mapping import run_mapping
 from src.compliance_mapping.rules_engine import load_lookup_table
+from src.compliance_mapping.plain_explanation import attach_plain_explanations
+from src.agentic.agents.anomaly_grouper import group_anomalies
 from src.fairness_scanner.run_scan import run_fairness_scan
 from src.report_generator.html_report import render_html_report
+from src.run_config import RunConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT.parent
@@ -25,21 +28,36 @@ def load_project_config() -> Dict[str, Any]:
 
 def run_veritas_on_records(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     config = load_project_config()
+    protected_attributes = tuple(dict.fromkeys(
+        attribute
+        for record in records
+        for attribute in record.get("protected_attributes", {})
+    ))
+    run_config = RunConfig.from_project_config(
+        config,
+        input_mode="uploaded_predictions",
+        protected_attributes=protected_attributes,
+    )
     anomaly_output = run_anomaly_detection(
         records,
-        random_state=config["anomaly_detection"]["isolation_forest"]["random_state"],
-        n_estimators=config["anomaly_detection"]["isolation_forest"]["n_estimators"],
+        random_state=run_config.isolation_forest_random_state,
+        n_estimators=run_config.isolation_forest_n_estimators,
+        contamination_override=run_config.contamination_override,
     )
-    fairness_output = run_fairness_scan(records, config)
+    fairness_output = run_fairness_scan(records, run_config)
     lookup = load_lookup_table(LOOKUP_PATH)
     mapped_findings = run_mapping(anomaly_output["findings"], fairness_output["findings"], lookup)
+    mapped_findings = attach_plain_explanations(mapped_findings)
+    anomaly_groups = group_anomalies(anomaly_output.get("findings", []))
     report_html = render_html_report(mapped_findings)
 
     return {
         "anomaly": anomaly_output,
         "fairness": fairness_output,
         "mapped_findings": mapped_findings,
+        "anomaly_groups": [g.to_dict() for g in anomaly_groups],
         "report_html": report_html,
+        "effective_run_config": run_config.to_effective_dict(),
     }
 
 

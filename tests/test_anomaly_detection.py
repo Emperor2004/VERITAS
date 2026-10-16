@@ -6,15 +6,20 @@ threshold_selection.py, output_schema.py) after reading their source.
 """
 from __future__ import annotations
 
+import json
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from src.anomaly_detection.isolation_forest import (
     build_feature_matrix,
     run_detection,
     evaluate_against_ground_truth,
+    main,
 )
 from src.anomaly_detection.threshold_selection import (
     select_threshold_knee,
@@ -24,6 +29,45 @@ from src.anomaly_detection.output_schema import validate_output
 
 
 # ---- label leakage guard (isolation_forest.py) --------------------------------
+
+def test_cli_uses_effective_config_defaults(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.safe_dump({
+        "anomaly_detection": {
+            "isolation_forest": {"random_state": 17, "n_estimators": 23}
+        }
+    }), encoding="utf-8")
+    input_path = tmp_path / "normalized.json"
+    input_path.write_text('[{"record_id":"r1"}]', encoding="utf-8")
+    output_path = tmp_path / "findings.json"
+    captured = {}
+
+    def fake_run_anomaly_detection(records, **kwargs):
+        captured.update(kwargs)
+        return {
+            "findings": [{"is_anomaly": False}],
+            "evaluation": None,
+            "threshold_selection": {
+                "unsupervised": {"contamination": 0.1, "cutoff_score": 0.5},
+                "supervised": None,
+            },
+        }
+
+    monkeypatch.setattr(
+        "src.anomaly_detection.isolation_forest.run_anomaly_detection",
+        fake_run_anomaly_detection,
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "isolation_forest", "--input", str(input_path), "--output", str(output_path),
+        "--config", str(config_path),
+    ])
+
+    main()
+
+    assert captured["random_state"] == 17
+    assert captured["n_estimators"] == 23
+    assert captured["contamination_override"] is None
+    assert json.loads(output_path.read_text(encoding="utf-8"))["findings"]
 
 def test_build_feature_matrix_raises_on_leaked_ground_truth_field():
     records = [{"features": {"age": 0.1, "ground_truth_operational_anomaly": True}}]

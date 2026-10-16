@@ -18,11 +18,13 @@ import json
 import os
 import numpy as np
 import pandas as pd
+import yaml
 from sklearn.ensemble import IsolationForest
 from sklearn.metrics import precision_score, recall_score, f1_score
 
 from src.anomaly_detection.output_schema import validate_output
 from src.anomaly_detection.threshold_selection import select_threshold_knee, select_threshold_grid_search
+from src.run_config import RunConfig
 
 EXCLUDED_FROM_FEATURES = {"ground_truth_operational_anomaly", "true_label"}
 
@@ -192,6 +194,7 @@ def main():
     parser = argparse.ArgumentParser(description="VERITAS Phase 2: anomaly detection")
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--config", default="config/config.yaml")
     parser.add_argument(
         "--contamination", type=float, default=None,
         help="Manual contamination override. If omitted (default), the threshold is "
@@ -201,9 +204,23 @@ def main():
              "cited justification -- an unjustified manual number reintroduces the "
              "exact problem this auto-selection replaces."
     )
-    parser.add_argument("--n-estimators", type=int, default=100)
-    parser.add_argument("--random-state", type=int, default=42)
+    parser.add_argument("--n-estimators", type=int, default=None)
+    parser.add_argument("--random-state", type=int, default=None)
     args = parser.parse_args()
+
+    with open(args.config, encoding="utf-8") as config_file:
+        project_config = yaml.safe_load(config_file)
+    anomaly_config = project_config.setdefault("anomaly_detection", {}).setdefault(
+        "isolation_forest", {}
+    )
+    if args.n_estimators is not None:
+        anomaly_config["n_estimators"] = args.n_estimators
+    if args.random_state is not None:
+        anomaly_config["random_state"] = args.random_state
+    run_config = RunConfig.from_project_config(
+        project_config,
+        contamination_override=args.contamination,
+    )
 
     print("[phase2] loading normalized log...")
     records = load_normalized_log(args.input)
@@ -211,9 +228,9 @@ def main():
     print("[phase2] running IsolationForest and deriving threshold...")
     output = run_anomaly_detection(
         records,
-        random_state=args.random_state,
-        n_estimators=args.n_estimators,
-        contamination_override=args.contamination,
+        random_state=run_config.isolation_forest_random_state,
+        n_estimators=run_config.isolation_forest_n_estimators,
+        contamination_override=run_config.contamination_override,
     )
 
     threshold_report = output["threshold_selection"]

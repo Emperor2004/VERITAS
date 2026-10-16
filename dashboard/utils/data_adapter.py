@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List
 
 import pandas as pd
@@ -154,50 +154,63 @@ def is_already_normalized(df: pd.DataFrame) -> bool:
     return {"record_id", "timestamp", "features", "protected_attributes"}.issubset(set(df.columns))
 
 
-def _normalize_timestamp(value: Any) -> str:
+PROTECTED_CANDIDATES = [
+    "sex", "gender", "race", "ethnicity", "demographic_group", "group", "region",
+    "age_group", "department", "country", "protected_group", "segment", "marital_status",
+]
+
+EXCLUDED_FEATURE_COLUMNS = {
+    "record_id", "id", "event_id", "row_id", "sample_id",
+    "timestamp", "event_time", "time", "datetime", "created_at",
+    "session_id", "session", "request_id",
+    "auth_method", "authentication_method", "login_method", "auth_type",
+    "predicted_label", "prediction", "predicted", "model_prediction", "decision", "output_label",
+    "prediction_confidence", "confidence", "score", "probability", "predicted_probability",
+    "true_label", "actual_label", "ground_truth", "label", "target", "actual", "outcome",
+    "sex", "gender", "race", "ethnicity", "demographic_group", "group", "region",
+    "age_group", "department", "country", "protected_group", "segment", "marital_status",
+}
+
+
+def _normalize_timestamp(value: Any, default_iso: str) -> str:
     if pd.isna(value):
-        return datetime.utcnow().isoformat(timespec="seconds")
+        return default_iso
     try:
         ts = pd.to_datetime(value)
         return ts.isoformat(timespec="seconds")
     except Exception:
-        return datetime.utcnow().isoformat(timespec="seconds")
+        return default_iso
 
 
-def _build_feature_dict(row: pd.Series, feature_columns: List[str]) -> Dict[str, float]:
-    features: Dict[str, float] = {}
-    for col in feature_columns:
-        if col in row.index:
-            features[col] = _safe_float(row[col])
-    if not features:
-        # fallback: use all non-label, non-protected fields
-        for col in row.index:
-            if col.lower() in {"record_id", "timestamp", "session_id", "auth_method", "prediction_confidence", "predicted_label", "true_label", "actual_label", "label", "target", "gender", "sex", "race", "group"}:
+def _resolve_feature_columns(df: pd.DataFrame) -> List[str]:
+    feature_cols: List[str] = []
+    for col in df.columns:
+        if str(col).lower() in EXCLUDED_FEATURE_COLUMNS:
+            continue
+        try:
+            numeric = pd.to_numeric(df[col], errors="coerce")
+            if numeric.notna().any():
+                feature_cols.append(str(col))
+        except Exception:
+            pass
+    return feature_cols
+
+
+def _resolve_protected_columns(df: pd.DataFrame) -> List[str]:
+    found_cols: List[str] = []
+    for candidate in PROTECTED_CANDIDATES:
+        col = _find_column(df, [candidate])
+        if col is not None and col not in found_cols:
+            found_cols.append(col)
+    if not found_cols:
+        for col in df.columns:
+            if str(col).lower() in EXCLUDED_FEATURE_COLUMNS:
                 continue
-            features[col] = _safe_float(row[col])
-    return features
-
-
-def _extract_protected_attributes(row: pd.Series) -> Dict[str, str]:
-    candidates = [
-        "sex", "gender", "race", "demographic_group", "group", "region",
-        "age_group", "department", "country", "protected_group",
-    ]
-    protected: Dict[str, str] = {}
-    for name in candidates:
-        col = _find_column(row.to_frame().T, [name])
-        if col is not None:
-            protected[name] = str(row[col]).strip() if not pd.isna(row[col]) else "unknown"
-    if not protected:
-        for col in row.index:
-            lower = col.lower()
-            if lower in {"record_id", "timestamp", "session_id", "auth_method", "prediction_confidence", "predicted_label", "true_label", "actual_label", "output", "probability", "score", "label", "target"}:
-                continue
-            if row[col].dtype == object or row[col].nunique() <= min(10, len(row)):
-                protected[col] = str(row[col]).strip() if not pd.isna(row[col]) else "unknown"
-                if len(protected) >= 2:
+            if df[col].dtype == object or df[col].nunique() <= min(10, len(df)):
+                found_cols.append(str(col))
+                if len(found_cols) >= 2:
                     break
-    return protected or {"group": "unknown"}
+    return found_cols
 
 
 def normalize_uploaded_dataframe(df: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -215,7 +228,7 @@ def normalize_uploaded_dataframe(df: pd.DataFrame) -> List[Dict[str, Any]]:
             normalized.append(record)
         return normalized
 
-    records: List[Dict[str, Any]] = []
+    # Resolve columns once upfront
     record_id_col = _find_column(df, ["record_id", "id", "event_id", "row_id", "sample_id"])
     timestamp_col = _find_column(df, ["timestamp", "event_time", "time", "datetime", "created_at"])
     session_col = _find_column(df, ["session_id", "session", "request_id"])
@@ -224,32 +237,18 @@ def normalize_uploaded_dataframe(df: pd.DataFrame) -> List[Dict[str, Any]]:
     confidence_col = _find_column(df, ["prediction_confidence", "confidence", "score", "probability", "predicted_probability"])
     true_label_col = _find_column(df, ["true_label", "actual_label", "ground_truth", "label", "target", "actual", "outcome"])
 
+    feature_columns = _resolve_feature_columns(df)
+    if not feature_columns:
+        feature_columns = [
+            c for c in df.columns
+            if c not in {record_id_col, timestamp_col, session_col, auth_col, predicted_label_col, confidence_col, true_label_col}
+        ]
+
+    protected_columns = _resolve_protected_columns(df)
+    upload_now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    records: List[Dict[str, Any]] = []
     for index, row in df.iterrows():
-        feature_columns = []
-        feature_exclusions = {
-            "record_id", "id", "event_id", "row_id", "sample_id",
-            "timestamp", "event_time", "time", "datetime", "created_at",
-            "session_id", "session", "request_id",
-            "auth_method", "authentication_method", "login_method", "auth_type",
-            "predicted_label", "prediction", "predicted", "model_prediction", "decision", "output_label",
-            "prediction_confidence", "confidence", "score", "probability", "predicted_probability",
-            "true_label", "actual_label", "ground_truth", "label", "target", "actual", "outcome",
-            "sex", "gender", "race", "demographic_group", "group", "region", "age_group", "country", "protected_group",
-        }
-        for col in df.columns:
-            lower = str(col).lower()
-            if lower in feature_exclusions:
-                continue
-            try:
-                sampled = pd.to_numeric(df[col], errors="coerce")
-                if sampled.notna().any():
-                    feature_columns.append(col)
-            except Exception:
-                pass
-
-        if not feature_columns:
-            feature_columns = [c for c in df.columns if c not in {record_id_col, timestamp_col, session_col, auth_col, predicted_label_col, confidence_col, true_label_col}]
-
         predicted_value = row[predicted_label_col] if predicted_label_col else None
         if predicted_value is None:
             if confidence_col and confidence_col in df.columns:
@@ -267,14 +266,27 @@ def normalize_uploaded_dataframe(df: pd.DataFrame) -> List[Dict[str, Any]]:
         true_label_value = row[true_label_col] if true_label_col else predicted_label
         true_label = _coerce_binary_label(true_label_value, field_name="ground_truth")
 
-        protected = _extract_protected_attributes(row)
+        protected: Dict[str, str] = {}
+        for pcol in protected_columns:
+            val = row[pcol]
+            protected[pcol] = str(val).strip() if not pd.isna(val) else "unknown"
+        if not protected:
+            protected = {"group": "unknown"}
+
+        features: Dict[str, float] = {}
+        for fcol in feature_columns:
+            features[fcol] = _safe_float(row[fcol])
+        if "prediction_confidence" not in features:
+            features["prediction_confidence"] = float(prediction_confidence)
+        if "predicted_label" not in features:
+            features["predicted_label"] = float(predicted_label)
 
         normalized_record = {
             "record_id": str(row[record_id_col]) if record_id_col else f"UPLOAD-{index:06d}",
-            "timestamp": _normalize_timestamp(row[timestamp_col]) if timestamp_col else datetime.utcnow().isoformat(timespec="seconds"),
+            "timestamp": _normalize_timestamp(row[timestamp_col], upload_now_iso) if timestamp_col else upload_now_iso,
             "session_id": str(row[session_col]) if session_col else str(uuid.uuid4()),
             "auth_method": str(row[auth_col]).strip() if auth_col and not pd.isna(row[auth_col]) else "password",
-            "features": _build_feature_dict(row, feature_columns),
+            "features": features,
             "protected_attributes": protected,
             "predicted_label": int(predicted_label),
             "prediction_confidence": float(prediction_confidence),
@@ -282,12 +294,7 @@ def normalize_uploaded_dataframe(df: pd.DataFrame) -> List[Dict[str, Any]]:
             "ground_truth_operational_anomaly": False,
             "ground_truth_anomaly_type": None,
         }
-
-        if "prediction_confidence" not in normalized_record["features"]:
-            normalized_record["features"]["prediction_confidence"] = float(prediction_confidence)
-        if "predicted_label" not in normalized_record["features"]:
-            normalized_record["features"]["predicted_label"] = float(predicted_label)
-
         records.append(normalized_record)
 
     return records
+

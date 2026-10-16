@@ -18,10 +18,12 @@ from src.fairness_scanner.thresholds import (
     permutation_significance_test,
 )
 from src.fairness_scanner.metrics import build_frame, compute_fairness_metrics_for_attribute
+from src.fairness_scanner.run_scan import run_fairness_scan
 from src.fairness_scanner.output_schema import validate_output
 
 
 # ---- thresholds.py -----------------------------------------------------------
+from src.run_config import RunConfig
 
 def test_evaluate_disparate_impact_below_threshold_is_violation():
     assert evaluate_disparate_impact(0.71, threshold=0.8) is True
@@ -47,6 +49,28 @@ def test_flag_small_groups_returns_empty_when_all_groups_sufficient():
 
 
 # ---- thresholds.py: permutation_significance_test -----------------------------
+def test_run_fairness_scan_uses_effective_protected_attribute_selection():
+    records = [
+        {
+            "record_id": str(index),
+            "predicted_label": index % 2,
+            "true_label": index % 2,
+            "protected_attributes": {
+                "sex": "A" if index % 2 else "B",
+                "race": "X" if index % 4 < 2 else "Y",
+            },
+        }
+        for index in range(40)
+    ]
+    config = RunConfig.from_project_config(
+        {"fairness": {"permutations": 4}},
+        protected_attributes=["sex"],
+    )
+
+    output = run_fairness_scan(records, config)
+
+    assert output["config"]["protected_attributes_scanned"] == ["sex"]
+    assert [finding["attribute"] for finding in output["findings"]] == ["sex"]
 
 def _identity_metric(y_true, y_pred, sensitive_features):
     """A metric that ignores sensitive_features entirely -- shuffling it can

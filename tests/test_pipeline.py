@@ -3,6 +3,7 @@ Tests for the VeritasPipeline unified modular API.
 """
 from __future__ import annotations
 
+import json
 import pytest
 import numpy as np
 
@@ -35,6 +36,30 @@ def test_pipeline_instantiation():
     assert pipeline.config == cfg
     assert pipeline.lookup_table is not None
     assert "controls" in pipeline.lookup_table
+
+
+def test_pipeline_anomaly_detection_uses_nested_config(monkeypatch):
+    config = {
+        "anomaly_detection": {
+            "isolation_forest": {
+                "random_state": 17,
+                "n_estimators": 23,
+            }
+        }
+    }
+    pipeline = VeritasPipeline(config=config)
+    captured = {}
+
+    def fake_run_anomaly_detection(**kwargs):
+        captured.update(kwargs)
+        return {"findings": []}
+
+    monkeypatch.setattr("src.pipeline.run_anomaly_detection", fake_run_anomaly_detection)
+
+    pipeline.run_anomaly_detection(records=[])
+
+    assert captured["random_state"] == 17
+    assert captured["n_estimators"] == 23
 
 
 def test_pipeline_in_memory_flow():
@@ -88,5 +113,8 @@ def test_run_all_generates_template_pdf_when_requested(tmp_path, monkeypatch):
     artifacts = pipeline.run_all(save_artifacts=True, output_dir=tmp_path, generate_pdf=True)
 
     pdf_path = tmp_path / "reports" / "audit_report.pdf"
+    config_path = tmp_path / "logs" / "effective_run_config.json"
     assert artifacts.report_pdf_generated is True
     assert pdf_path.read_bytes().startswith(b"%PDF-")
+    assert artifacts.effective_run_config["schema_version"] == 1
+    assert json.loads(config_path.read_text(encoding="utf-8"))["input_mode"] == "adult_income"

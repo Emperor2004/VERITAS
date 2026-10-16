@@ -1,11 +1,84 @@
-scikit-learn>=1.4
-fairlearn>=0.10
-faker>=25.0
-pyyaml>=6.0
-python-docx>=1.1
-jinja2>=3.1
-reportlab>=4.0
-pytest>=8.0
+# =============================================================================
+# VERITAS — Python dependency manifest
+# =============================================================================
+# Install everything:
+#   pip install -r requirements.txt
+#
+# For the optional Streamlit dashboard (legacy):
+#   pip install -r dashboard/requirements.txt
+#
+# For the Next.js frontend:
+#   cd frontend && npm install
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Core data stack
+# ---------------------------------------------------------------------------
 pandas>=2.0
+numpy>=1.26
+
+# ---------------------------------------------------------------------------
+# Phase 1 — Log Ingestion
+# ---------------------------------------------------------------------------
+ucimlrepo>=0.0.7          # UCI Adult Income dataset loader (auto-caches)
+faker>=25.0               # Synthetic operational metadata generation
+pyyaml>=6.0               # config/config.yaml loading
+
+# ---------------------------------------------------------------------------
+# Phase 2 — Anomaly Detection
+# ---------------------------------------------------------------------------
+scikit-learn>=1.4         # IsolationForest, LogisticRegression, preprocessing
+
+# ---------------------------------------------------------------------------
+# Phase 3 — Fairness & Bias Scanner
+# ---------------------------------------------------------------------------
+fairlearn>=0.10           # Demographic parity, equalized odds, disparate impact
+
+# ---------------------------------------------------------------------------
+# Phase 4 — Compliance Mapping Engine
+# ---------------------------------------------------------------------------
+# (uses only stdlib + pyyaml + pydantic — no additional deps)
+
+# ---------------------------------------------------------------------------
+# Phase 5 — Report Generator
+# ---------------------------------------------------------------------------
+jinja2>=3.1               # HTML report templating
+python-docx>=1.1          # DOCX template population
+reportlab>=4.0            # PDF rendering from DOCX template sections
+
+# ---------------------------------------------------------------------------
+# Schema validation (all phases)
+# ---------------------------------------------------------------------------
 pydantic>=2.6
-ucimlrepo>=0.0.7
+
+# ---------------------------------------------------------------------------
+# Phase 6 — Agentic AI Layer (LangGraph + LangChain)
+# ---------------------------------------------------------------------------
+langgraph>=1.2,<2.0       # Multi-agent directed graph + SqliteSaver checkpointing
+langchain>=0.2            # Core LangChain abstractions (chains, prompts, messages)
+langchain-core>=0.2       # Low-level primitives (required by langgraph)
+
+# LLM provider — install ONE of the following based on your environment:
+#
+#   Google Gemini (recommended; set GOOGLE_API_KEY):
+#     pip install langchain-google-genai>=1.0
+#
+#   Ollama (local, no API key; set OLLAMA_BASE_URL if not localhost):
+#     pip install langchain-ollama>=0.1
+#
+# If neither provider is configured, VERITAS runs in deterministic mode
+# (all 5 statistical phases execute; agentic narration is skipped).
+
+# ---------------------------------------------------------------------------
+# Phase 7 — FastAPI Backend (api/)
+# ---------------------------------------------------------------------------
+fastapi>=0.111            # REST API framework
+uvicorn[standard]>=0.29   # ASGI server (includes websocket + h11 extras)
+python-multipart>=0.0.9   # Required by FastAPI for UploadFile / Form handling
+httpx>=0.27               # Async HTTP client (used in tests and API calls)
+
+# ---------------------------------------------------------------------------
+# Testing
+# ---------------------------------------------------------------------------
+pytest>=8.0
+pytest-asyncio>=0.23      # Async test support for FastAPI route tests

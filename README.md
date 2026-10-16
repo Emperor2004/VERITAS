@@ -2,7 +2,7 @@
 
 **V**erifiable **E**vidence & **R**isk **I**dentification **T**oolkit for **A**I **S**ystems
 
-> An automated AI-audit pipeline that ingests prediction logs from a classifier, detects anomalies and fairness violations, and translates findings into citable NIST AI RMF control mappings with generated audit evidence.
+> An agentic AI audit platform: ingests prediction logs from a classifier, runs a 6-agent LangGraph pipeline for schema inference, human-in-the-loop governance, anomaly clustering, and plain-English compliance narration, then outputs citable NIST AI RMF control mappings delivered through a luxury Next.js 14 web interface.
 
 **Status:** In development (AY 2026-27) · Final-year B.Tech capstone, AI & ML, SIT Pune · Sponsored by Optywise AI Solutions
 **Project ID:** OPT-2
@@ -11,16 +11,18 @@
 
 ## Development Status
 
-| Phase | Description | Status |
+| Phase / Component | Description | Status |
 |---|---|---|
-| 1 | Ingestion — dataset load, audit-subject model, feature engineering, anomaly injection, synthetic metadata | ✅ Built & tested |
-| 2 | Anomaly Detection — IsolationForest, data-driven threshold selection, explainability, evaluation | ✅ Built & tested |
-| 3 | Fairness Scanner — Fairlearn metrics, EEOC four-fifths threshold, permutation-test thresholds for demographic parity/equalized odds, small-group safeguards | ✅ Built & tested |
-| 4 | Compliance Mapping Engine (core original contribution) | ✅ Built & tested (CLI & programmatic entrypoints) |
-| 5 | Report Generator (HTML/PDF) | ✅ Built & tested (HTML displayed in the dashboard; PDF generated from the DOCX template) |
-| Orchestrator | Pipeline Orchestration & In-Memory Runner | ✅ Built (`src/orchestrator.py` & `src/pipeline.py`) with SHA-256 manifests |
+| 1. Ingestion | Dataset load, audit-subject model, feature engineering, anomaly injection, synthetic metadata | ✅ Built & tested |
+| 2. Anomaly Detection | IsolationForest, data-driven threshold selection, explainability, evaluation | ✅ Built & tested |
+| 3. Fairness Scanner | Fairlearn metrics, EEOC four-fifths threshold, permutation-test thresholds for demographic parity/equalized odds | ✅ Built & tested |
+| 4. Compliance Mapping | Rules-based deterministic NIST AI RMF mapping engine (core original contribution) | ✅ Built & tested |
+| 5. Report Generator | Self-contained HTML report + PDF rendered with ReportLab | ✅ Built & tested |
+| 6. Agentic AI Upgrade | 6 specialized AI agents (Schema inference, Anomaly clustering, Config proposer, Human-in-the-loop LangGraph orchestrator with durable SQLite checkpointer, Explanation rewriter with verifier, Conversational Q&A) | ✅ Built & tested |
+| 7. Full-Stack Web App | High-performance FastAPI backend + Next.js 14 TypeScript frontend with luxury glassmorphism UI, hand-crafted SVG disparity charts, and sandboxed workpaper | ✅ Built & verified |
+| Test Suite | 134 automated unit, integration, and golden equivalence tests passing (100%) | ✅ 134 / 134 Passing |
 
-Each phase has a standalone CLI. Phases 1–5 can also run through the subprocess orchestrator, which records a SHA-256 manifest, or through the in-memory `VeritasPipeline` API. Generated artifacts are written beneath `outputs/`; keep sensitive or run-specific artifacts out of source control.
+Each phase has a standalone CLI. Phases 1–5 can also run through the subprocess orchestrator with a SHA-256 manifest, through the in-memory `VeritasPipeline` API, or interactively through the full-stack Next.js web application.
 
 ---
 
@@ -29,6 +31,8 @@ Each phase has a standalone CLI. Phases 1–5 can also run through the subproces
 - [1. Overview](#1-overview)
 - [2. Scope](#2-scope)
 - [3. Architecture](#3-architecture)
+- [3a. Agentic AI Upgrade (6 Agents)](#3a-agentic-ai-upgrade-6-agents)
+- [3b. Full-Stack Web Application](#3b-full-stack-web-application)
 - [4. Repository Structure](#4-repository-structure)
 - [5. Tech Stack](#5-tech-stack)
 - [6. Installation](#6-installation)
@@ -46,14 +50,17 @@ Each phase has a standalone CLI. Phases 1–5 can also run through the subproces
 
 ## 1. Overview
 
-VERITAS treats an AI system — specifically a tabular income/lending classifier — as the **subject of an audit**, not the tool performing one. It ingests prediction-event logs (UCI Adult Income predictions wrapped with synthetic operational metadata) and runs five phases:
+VERITAS treats an AI system as the **subject of an audit**, not the tool performing one. It ingests prediction-event logs and runs a complete agentic AI-powered audit pipeline:
 
-1. Detect operational and statistical anomalies in prediction behavior.
-2. Scan for statistical fairness violations across protected groups.
-3. Translate any findings into specific, citable **NIST AI RMF** control IDs.
-4. Generate a structured audit report (PDF/HTML) as evidence output.
+1. **Schema Discovery (Agent-1):** Automatically infers column roles, protected attributes, and privacy-safe feature candidates.
+2. **Human-in-the-Loop Governance (Agent-3 + LangGraph, Agent-4):** Pauses for mandatory auditor approval with AI-generated configuration rationales before any statistical computation begins.
+3. **Anomaly Detection & Clustering (Agent-2):** Isolation Forest detection grouped by dominant z-score signatures with precision/recall estimates.
+4. **Fairness & Disparity Scanning:** EEOC 4/5ths Rule (disparate impact ratio ≥ 0.80), demographic parity difference, and equalized odds via seeded permutation testing.
+5. **NIST AI RMF Compliance Mapping (Agent-5):** Deterministic, rules-based mapping to NIST AI 100-1 (Govern, Map, Measure, Manage) with plain-English explanations verified for number traceability.
+6. **Report Generation:** SHA-256 sealed, board-ready HTML workpaper and PDF report.
+7. **Conversational Audit Interrogation (Agent-6):** Immutable read-only Q&A assistant over case findings.
 
-The system does not certify compliance and does not interact with a production model. It produces **audit evidence artifacts** for a hypothetical audit exercise.
+The **Deterministic Statistical Boundary** is a core architectural guarantee: no AI agent ever calculates or modifies metrics, z-scores, p-values, or compliance outcomes. All numerical computation is 100% deterministic.
 
 ---
 
@@ -76,7 +83,7 @@ The system does not certify compliance and does not interact with a production m
 
 ## 3. Architecture
 
-VERITAS is organized into five independently runnable phases connected by JSON artifact contracts. Ingestion feeds anomaly detection and fairness scanning; compliance mapping joins those results; report generation renders the mapped findings.
+VERITAS is organized into **seven phases** — five deterministic statistical phases (Phases 1–5) backed by an agentic AI layer (Phase 6) and delivered through a full-stack web application (Phase 7). Phases 1–5 are connected by JSON artifact contracts and can run independently, in parallel, or end-to-end via the orchestrator or web API.
 
 **Dependency graph (not purely sequential):** Anomaly Detection and the Fairness & Bias Scanner both consume `normalized_log.json` directly from ingestion and have no dependency on one another — they run **in parallel**. The Compliance Mapping Engine is the actual join point: it blocks until *both* findings files exist, and must reconcile two structurally different artifact shapes (anomaly findings are per-record; fairness findings are per-protected-attribute aggregates).
 
@@ -112,7 +119,75 @@ VERITAS is organized into five independently runnable phases connected by JSON a
                   audit_report.pdf / .html
 ```
 
-> **Note on the Compliance Mapping Engine:** this is the only module that is original work. Anomaly detection and fairness scanning use existing, well-established libraries (scikit-learn, Fairlearn) as-is, and run independently of each other. The rules-based translation layer — mapping a raw technical finding to a specific NIST AI RMF control ID with a defensible rationale — is what this project actually contributes. Its core logic (reconciliation, severity resolution, control lookup, explainability trace) is built, unit-tested, and has both a CLI entrypoint (`python -m src.compliance_mapping.run_mapping`) and programmatic functions. Phases 1–5 can be run individually, via subprocess orchestration (`src/orchestrator.py`), or end-to-end in-memory via `VeritasPipeline`.
+> **Note on originality:** The **Compliance Mapping Engine** (Phase 4) is the core original contribution in the deterministic pipeline — anomaly detection and fairness scanning use established libraries (scikit-learn, Fairlearn) as-is. The **Agentic AI layer** (6 agents, LangGraph graph, human-in-the-loop gate, explainability verifier) and the **Full-Stack Web Application** (FastAPI API + Next.js 14 frontend) are additional original contributions built on top of Phases 1–5. All phases can be run individually via CLI, through the subprocess orchestrator with SHA-256 manifest, in-memory via `VeritasPipeline`, or interactively through the web application.
+
+---
+
+## 3a. Agentic AI Upgrade (6 Agents)
+
+VERITAS now ships a **multi-agent AI layer** built on LangGraph + LangChain, operating strictly inside a *Deterministic Statistical Boundary*: every metric, z-score, p-value, and compliance verdict is computed by the deterministic pipeline; agents only read, reason over, and narrate those results.
+
+| Agent | Role | Location |
+|---|---|---|
+| **Agent-1 — Schema Inference** | Analyses uploaded CSV headers and sample rows; infers column roles (prediction, ground-truth, protected attribute, feature) and proposes a validated audit config | `src/agentic/agents/schema_agent.py` |
+| **Agent-2 — Anomaly Grouper** | Clusters flagged anomalies by dominant z-score signature and writes a human-readable cluster breakdown narrative | `src/agentic/agents/anomaly_grouper.py` |
+| **Agent-3 — Config Proposer** | Drafts an auditor-facing rationale for the proposed audit configuration (protected attributes, thresholds, fairness metrics) before the pipeline runs | `src/agentic/agents/config_proposer.py` |
+| **Agent-4 — Approval Gate** | LangGraph conditional edge: blocks pipeline execution until the auditor explicitly confirms or rejects Agent-3's proposed config. Pipeline never proceeds without human sign-off | `src/agentic/graph.py` |
+| **Agent-5 — Explanation Rewriter + Verifier** | Rewrites compliance-mapping findings into board-readable plain English; a second verifier pass checks every cited number against the deterministic output to block hallucinated statistics | `src/agentic/agents/explainer.py` |
+| **Agent-6 — Q&A Assistant** | Immutable, read-only conversational assistant over the sealed case file. Cannot modify findings; cites only numbers already present in the deterministic audit output | `src/agentic/agents/qa_agent.py` |
+
+**LangGraph Execution Graph:**
+```
+[Upload] → Agent-1 (Schema) → Agent-3 (Config Rationale)
+                                        │
+                              Agent-4 (Human Approval Gate)
+                                        │ APPROVED
+                             Deterministic Pipeline (Phases 1–5)
+                                        │
+                    ┌───────────────────┴───────────────────┐
+              Agent-2 (Anomaly Grouper)            Agent-5 (Explainer + Verifier)
+                    └───────────────────┬───────────────────┘
+                                        │
+                              Agent-6 (Q&A Assistant)
+```
+
+The graph is persisted via `SqliteSaver` checkpointing, so interrupted runs can be resumed from the last completed node.
+
+---
+
+## 3b. Full-Stack Web Application
+
+VERITAS ships a production-ready **Next.js 14 + FastAPI** full-stack web application, designed for live executive demonstrations.
+
+### Architecture
+```
+┌──────────────────────────────────────────────┐
+│            Next.js 14 (Port 3000)            │  ← App Router, TypeScript, Tailwind CSS
+│  ┌──────────────┐  ┌───────────────────────┐ │
+│  │  Dropzone /  │  │  Results Case-File    │ │
+│  │  Pre-flight  │  │  Workspace (tabs)     │ │
+│  │  Review UI   │  │  Summary / Charts /   │ │
+│  │  (Agent-3)   │  │  NIST Table / Q&A     │ │
+│  └──────┬───────┘  └──────────┬────────────┘ │
+└─────────┼────────────────────┼──────────────┘
+          │ REST /api/*         │
+┌─────────▼────────────────────▼──────────────┐
+│           FastAPI Backend (Port 8000)        │
+│  routes_runs.py  │  schemas.py              │
+│  SQLite runs DB  │  LangGraph (6 agents)    │
+└──────────────────────────────────────────────┘
+```
+
+### Frontend Pages
+| Route | Page | Description |
+|---|---|---|
+| `/` | Landing | Executive hero, three-pillar value proposition |
+| `/runs/new` | Upload | Glassmorphism dropzone + Agent-1 schema inspection card |
+| `/runs/[id]/review` | Pre-flight Approval | Agent-3 config rationale + auditor sign-off (Agent-4 gate) |
+| `/runs/[id]/summary` | Executive Summary | Outlier stats, Agent-2 cluster breakdown |
+| `/runs/[id]/disparity` | Disparity Charts | SVG bar chart with EEOC 0.80 threshold line, per-attribute |
+| `/runs/[id]/findings` | NIST Table | Paginated findings with Agent-5 plain-English explanations |
+| `/runs/[id]/qa` | Q&A Chat | Agent-6 conversational assistant with citation chips |
 
 ---
 
@@ -122,88 +197,66 @@ VERITAS is organized into five independently runnable phases connected by JSON a
 veritas/
 ├── README.md
 ├── pyproject.toml                  # Packaging specification and CLI entrypoints
-├── requirements.txt
+├── requirements.txt               # Python backend dependencies
 ├── .gitignore
 │
-├── config/
-│   └── config.yaml                 # Consolidated global config (dataset, audit-subject model,
-│                                   # anomaly injection, protected attributes, fairness thresholds)
+├── api/                            # ★ FastAPI backend (Port 8000)
+│   ├── main.py                     # FastAPI application entrypoint
+│   ├── routes_runs.py              # Run lifecycle endpoints (/api/runs/*)
+│   └── schemas.py                  # Pydantic request/response schemas
 │
-├── data/
-│   ├── raw/                        # UCI Adult Income source CSV (cached after first download)
-│   ├── synthetic_logs/             # reserved, currently unused
-│   └── processed/                  # normalized_log.json output
+├── frontend/                       # ★ Next.js 14 frontend (Port 3000)
+│   ├── app/
+│   │   ├── layout.tsx              # Root layout with Navbar and global styles
+│   │   ├── page.tsx                # Executive landing page
+│   │   └── runs/[id]/
+│   │       ├── review/page.tsx     # Pre-flight human approval (Agent-3 + Agent-4)
+│   │       └── (results)/
+│   │           ├── layout.tsx      # Results tab shell with stat strip
+│   │           ├── summary/        # Executive summary + Agent-2 cluster breakdown
+│   │           ├── disparity/      # SVG disparity charts (EEOC 4/5ths)
+│   │           ├── findings/       # NIST AI RMF table + Agent-5 explanations
+│   │           └── qa/             # Agent-6 Q&A chat interface
+│   ├── components/
+│   │   ├── Navbar.tsx              # Luxury glass navigation bar
+│   │   ├── Dropzone.tsx            # Glassmorphism CSV upload with validation
+│   │   ├── ColumnCheck.tsx         # Agent-1 schema inspection card
+│   │   ├── RunStepper.tsx          # Animated audit progress stepper
+│   │   ├── DisparityChart.tsx      # Handcrafted SVG bar chart with 0.80 threshold
+│   │   ├── FindingsTable.tsx       # Paginated NIST table with expandable Agent-5 narratives
+│   │   └── SeverityMark.tsx        # Neon severity badges (CRITICAL / HIGH / INFO)
+│   ├── styles/tokens.css           # Design tokens + glassmorphism utilities
+│   ├── tailwind.config.ts          # Tailwind design system config
+│   ├── next.config.js              # API proxy rewrites
+│   └── package.json
 │
-├── src/
-│   ├── __init__.py                 # Top-level package exports (VeritasPipeline, run_*)
-│   ├── pipeline.py                 # Unified in-memory VeritasPipeline execution engine
-│   ├── orchestrator.py             # CLI orchestrator (subprocess isolation & in-memory runner)
-│   │
+├── src/                            # Python audit pipeline (Phases 1–5)
+│   ├── agentic/                    # ★ LangGraph multi-agent layer
+│   │   ├── graph.py                # LangGraph state machine + SqliteSaver checkpointer
+│   │   └── agents/
+│   │       ├── schema_agent.py     # Agent-1: Schema inference
+│   │       ├── anomaly_grouper.py  # Agent-2: Anomaly cluster narrative
+│   │       ├── config_proposer.py  # Agent-3: Config rationale
+│   │       ├── explainer.py        # Agent-5: Plain-English rewriter + verifier
+│   │       └── qa_agent.py         # Agent-6: Read-only Q&A assistant
+│   ├── __init__.py
+│   ├── pipeline.py
+│   ├── run_config.py
+│   ├── orchestrator.py
 │   ├── ingestion/
-│   │   ├── __init__.py
-│   │   ├── log_loader.py           # Phase 1 entrypoint & run_ingestion()
-│   │   ├── audit_subject_model.py  # trains the stand-in classifier (LogisticRegression)
-│   │   ├── feature_engineering.py  # builds IsolationForest's feature set
-│   │   ├── synthetic_metadata.py   # Faker metadata; injects off_hours_rare_auth anomaly pattern
-│   │   ├── feature_anomalies.py    # injects feature_outlier and duplicate_record patterns
-│   │   └── schema.py               # normalized_log.json schema + validation
-│   │
 │   ├── anomaly_detection/
-│   │   ├── __init__.py
-│   │   ├── isolation_forest.py     # Phase 2 entrypoint & run_anomaly_detection()
-│   │   ├── threshold_selection.py  # knee-point (unsupervised) + grid search (supervised)
-│   │   └── output_schema.py        # anomaly_findings.json schema
-│   │
 │   ├── fairness_scanner/
-│   │   ├── __init__.py
-│   │   ├── run_scan.py             # Phase 3 entrypoint & run_fairness_scan()
-│   │   ├── metrics.py              # Fairlearn metric computation
-│   │   ├── thresholds.py           # EEOC four-fifths decision, permutation tests, small-group flagging
-│   │   └── output_schema.py        # fairness_findings.json schema
-│   │
-│   ├── compliance_mapping/         # Phase 4 — core original contribution
-│   │   ├── __init__.py
-│   │   ├── run_mapping.py          # Phase 4 entrypoint & run_mapping()
-│   │   ├── rules_engine.py         # orchestrates lookup + escalation; load_lookup_table() validates YAML
-│   │   ├── input_reconciler.py     # filters is_anomaly=True, unpacks fairness metrics
-│   │   ├── severity_policy.py      # validates severity_tier, resolves MANAGE escalation
-│   │   ├── nist_control_lookup.yaml# citable NIST AI RMF Playbook controls & rules
-│   │   ├── explainability_trace.py # attaches matched NIST action text + trigger explanation
-│   │   └── output_schema.py        # MappedFinding / ControlCitation dataclasses
-│   │
-│   └── report_generator/           # Phase 5 — audit reporting
-│       ├── __init__.py
-│       ├── run_report.py           # Phase 5 entrypoint
-│       ├── html_report.py          # renders self-contained HTML report via Jinja2
-│       ├── pdf_report.py           # populates the DOCX template and renders PDF with ReportLab
-│       └── templates/
-│           ├── report_template.html
-│           └── report_template.docx # DOCX structure and content used for PDF output
+│   ├── compliance_mapping/
+│   └── report_generator/
 │
-├── dashboard/                      # Streamlit upload-and-audit interface
-│   ├── app.py
-│   ├── requirements.txt             # Additional dashboard dependencies
-│   ├── services/
-│   └── utils/
-│
-├── tests/                          # 84 tests across all modules — see §11
-│   ├── conftest.py                 # shared fixtures for compliance_mapping tests
-│   ├── test_pipeline.py            # end-to-end in-memory VeritasPipeline tests
-│   ├── test_ingestion.py
-│   ├── test_anomaly_detection.py
-│   ├── test_fairness_scanner.py
-│   ├── test_compliance_mapping.py
-│   ├── test_report_generator.py    # HTML and PDF generator tests
-│   └── fixtures/                   # JSON/YAML reference schemas and edge cases
-│
+├── config/
+│   └── config.yaml
+├── data/
+│   ├── demo_audit_dataset.csv      # ★ Pre-built CEO demonstration dataset
+│   └── processed/
+├── tests/                          # 134 tests — see §11
 ├── outputs/
-│   ├── logs/                       # anomaly_findings.json, fairness_findings.json, mapped_findings.json
-│   └── reports/                    # audit_report.html, audit_report.pdf
-│
 └── docs/
-    ├── architecture.md             # System architecture & execution topology
-    ├── module_contracts.md         # JSON schema contracts between modules
-    └── nist_mapping_reference.md   # Detailed NIST AI RMF mapping and escalation policy
 ```
 
 Each module is independently runnable via CLI and callable programmatically via Python functions. No module imports directly from another module's internal state — they can communicate via JSON artifacts or in-memory through `VeritasPipeline`.
@@ -214,6 +267,9 @@ Each module is independently runnable via CLI and callable programmatically via 
 
 | Layer | Tool / Library | Purpose |
 |---|---|---|
+| **Frontend** | Next.js 14 (App Router), TypeScript, Tailwind CSS, TanStack Query | Full-stack web UI — interactive audit workspace |
+| **Backend API** | FastAPI, Uvicorn, Pydantic v2, SQLite | REST API serving run lifecycle and LangGraph-backed agentic endpoints |
+| **Agentic AI** | LangGraph, LangChain, OpenAI GPT-4o, SqliteSaver | 6-agent directed graph with durable checkpointing and human-in-the-loop approval gate |
 | Audit-Subject Model | `scikit-learn` (`LogisticRegression`) | Stand-in classifier simulating the bank's income-prediction model; produces the predictions VERITAS actually audits |
 | Anomaly Detection | `scikit-learn` (`IsolationForest`) | Unsupervised outlier detection over prediction logs |
 | Threshold Selection | Custom (knee-point geometry + grid search) | Data-driven contamination selection, replacing an arbitrary constant |
@@ -227,7 +283,7 @@ Each module is independently runnable via CLI and callable programmatically via 
 | Compliance Reference | NIST AI RMF | Primary framework for control ID mapping |
 | Fairness Threshold Standard | EEOC four-fifths rule (0.8 ratio) | External, defensible fairness threshold — the only threshold in this project with an external citation so far |
 
-**Deliberately excluded from the core pipeline:** any LLM-based reasoning. The compliance mapping engine is planned as a deterministic rules engine with no "LLM assist" path.
+**Deterministic Statistical Boundary:** No AI agent ever calculates or modifies a metric, z-score, p-value, or compliance verdict. All numerical computation uses the deterministic Python pipeline above; agents only read and narrate those results.
 
 ---
 
@@ -237,6 +293,7 @@ Each module is independently runnable via CLI and callable programmatically via 
 git clone <repo-url> veritas
 cd veritas
 
+# --- Python Backend ---
 python -m venv .venv
 # Windows PowerShell
 .\.venv\Scripts\Activate.ps1
@@ -244,24 +301,48 @@ python -m venv .venv
 source .venv/bin/activate
 
 python -m pip install -r requirements.txt
-# Optional: dependencies for the Streamlit dashboard
-python -m pip install -r dashboard/requirements.txt
+
+# --- Next.js Frontend ---
+cd frontend
+npm install
+cd ..
 ```
 
-**`requirements.txt`:**
+**`requirements.txt` (Python backend core):**
 ```
+# Core data stack
 pandas>=2.0
-scikit-learn>=1.4
-fairlearn>=0.10
+numpy>=1.26
+
+# Phases 1-5 (deterministic pipeline)
+ucimlrepo>=0.0.7
 faker>=25.0
 pyyaml>=6.0
-pydantic>=2.6
-ucimlrepo>=0.0.7
-python-docx>=1.1
+scikit-learn>=1.4
+fairlearn>=0.10
 jinja2>=3.1
+python-docx>=1.1
 reportlab>=4.0
+pydantic>=2.6
+
+# Phase 6 — Agentic AI layer
+langgraph>=1.2,<2.0
+langchain>=0.2
+langchain-core>=0.2
+# LLM provider (pick one): langchain-google-genai>=1.0  OR  langchain-ollama>=0.1
+
+# Phase 7 — FastAPI backend
+fastapi>=0.111
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+httpx>=0.27
+
+# Testing
 pytest>=8.0
+pytest-asyncio>=0.23
 ```
+
+> **Frontend:** `cd frontend && npm install` installs Next.js 14, Tailwind CSS, TanStack Query, and all TypeScript dependencies from `frontend/package.json` automatically.
 
 ---
 
@@ -333,7 +414,7 @@ anomaly_injection:
 
 ### 8.1 Automated Pipeline Orchestration (`src/orchestrator.py`)
 
-The pipeline orchestrator coordinates Phases 1 through 5, supports dry runs and phase selection, and logs execution evidence into `outputs/logs/run/run_manifest.json` with SHA-256 hashes of all inputs and outputs. Both subprocess and `--in-memory` runs generate `outputs/reports/audit_report.html` and `outputs/reports/audit_report.pdf`.
+The pipeline orchestrator coordinates Phases 1 through 5, supports dry runs and phase selection, and logs execution evidence into `outputs/logs/run/run_manifest.json`, including the versioned effective analysis config and SHA-256 hashes. Both subprocess and `--in-memory` runs generate `outputs/reports/audit_report.html` and `outputs/reports/audit_report.pdf`.
 
 ```bash
 # 1. Full pipeline run (subprocesses with SHA-256 integrity validation)
@@ -387,15 +468,53 @@ python -m src.compliance_mapping.run_mapping --anomaly-input outputs/logs/anomal
 python -m src.report_generator.run_report --input outputs/logs/mapped_findings.json --output outputs/reports/audit_report.html --pdf-output outputs/reports/audit_report.pdf
 ```
 
-### 8.4 Streamlit Dashboard
+### 8.4 Streamlit Dashboard (Legacy)
 
-Install the optional dashboard dependencies as shown in §6, then run from the repository root:
+> **Note:** The Streamlit dashboard is the original upload-and-audit interface. It has been superseded by the full-stack Next.js web application (§8.5), which provides the full agentic AI pipeline, pre-flight governance, interactive disparity charts, and Agent-6 Q&A. The Streamlit dashboard remains functional for quick local CSV inspection without the agentic layer.
+
+Install the optional dashboard dependencies, then run from the repository root:
 
 ```bash
+python -m pip install -r dashboard/requirements.txt
 python -m streamlit run dashboard/app.py
 ```
 
 The dashboard accepts CSV and Excel (`.xlsx`/`.xls`) prediction logs. It requires a binary prediction column, a binary actual/ground-truth column, at least one protected-attribute column, and at least one numeric feature. Column names are normalized for case, spaces, and hyphens; common aliases such as `prediction`/`predicted_label`, `actual`/`true_label`, and `gender`/`sex` are accepted. Labels must use supported binary values such as `0`/`1`, true/false, or yes/no. Invalid or missing labels are rejected before analysis. The sidebar provides a downloadable CSV example.
+
+### 8.5 Full-Stack Web Application (FastAPI + Next.js)
+
+This is the recommended interface for live demonstrations. Run both servers simultaneously in separate terminals:
+
+**Terminal 1 — FastAPI Backend**
+```bash
+# From the repository root, with .venv activated
+uvicorn api.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+**Terminal 2 — Next.js Frontend**
+```bash
+# From the repository root
+cd frontend
+npm run dev
+```
+
+Open **`http://localhost:3000`** in your browser.
+
+> **Environment variables:** Create a `.env` file in the repository root with your chosen LLM provider key before running:
+> ```
+> # Google Gemini (recommended)
+> GOOGLE_API_KEY=AIza...
+> VERITAS_LLM_PROVIDER=gemini
+> VERITAS_LLM_MODEL=gemini-1.5-flash     # optional, this is the default
+>
+> # --- OR --- Ollama (local, no API key required)
+> VERITAS_LLM_PROVIDER=ollama
+> OLLAMA_BASE_URL=http://localhost:11434  # optional
+> VERITAS_LLM_MODEL=llama3.2             # optional
+> ```
+> If neither is configured, VERITAS runs in **deterministic mode** — all 5 statistical pipeline phases execute normally; only the agentic narration steps are skipped.
+
+**Demo dataset:** Upload `data/demo_audit_dataset.csv` — a pre-built 500-record CSV with deliberate fairness and anomaly signals — on the Upload page. Full demonstration script: [`VERITAS_CEO_Demonstration_Guide.md`](./VERITAS_CEO_Demonstration_Guide.md).
 
 ---
 
@@ -429,7 +548,7 @@ The dashboard accepts CSV and Excel (`.xlsx`/`.xls`) prediction logs. It require
 
 ### 9.4 Compliance Mapping Engine
 
-The project's original contribution. Everything above uses off-the-shelf libraries (scikit-learn, Fairlearn) as-is; this module is the custom rules-based translation layer from a raw technical finding to a specific, citable NIST AI RMF control ID.
+The project's core original contribution in the deterministic pipeline. Anomaly detection and fairness scanning use off-the-shelf libraries (scikit-learn, Fairlearn) as-is; this module is the custom rules-based translation layer from a raw technical finding to a specific, citable NIST AI RMF control ID. The **Agentic AI layer** (§3a) and **Full-Stack Web Application** (§3b) are separate original contributions layered on top.
 
 - **`input_reconciler.py`** — joins the two structurally different upstream shapes without force-merging them. Filters `anomaly_findings.json` to genuine findings only (`is_anomaly == True`; `is_anomaly == False` records are normal operation, not findings, and are never mapped). Unpacks each `fairness_findings.json` row — one per attribute, three metrics inline — into three independent per-metric findings, since each metric gets its own severity and control citation.
 - **`severity_policy.py`** — deliberately thin: does **not** compute severity (no permutation test, no EEOC comparison — that requires raw per-record data this module doesn't have). It only validates that an incoming `severity_tier` is a known value and resolves what it escalates to.
@@ -437,7 +556,7 @@ The project's original contribution. Everything above uses off-the-shelf librari
 - **`explainability_trace.py`** — attaches the *specific* NIST action text matched (not just a bare control ID) and a human-readable trigger explanation per finding, including the anomaly detector's top-contributing-features or the fairness scanner's small-group caveat where relevant. This addresses the explainability-trace gap flagged in CA-1 review (§12).
 - **`nist_control_lookup.yaml`** — static, versioned lookup table. Anomaly findings map to **MEASURE 2.4** (production monitoring — its action text names control-limit/ML-based anomaly monitoring almost literally); fairness findings map to **MEASURE 2.11** (fairness and bias evaluated); both carry a secondary citation to **MAP 5.1** (impact characterization). Severity is a property of the *finding*, not the finding type: any `violation`-tier finding of any kind escalates generically to **MANAGE 1.3** (response planned/documented) and **MANAGE 1.4** (residual risk documented), via a `severity_tiers` table keyed only on the tier name — this is what lets the escalation logic generalize to data the current sandbox testing doesn't exercise, without a code change.
 - **`run_mapping.py`** — CLI entrypoint matching the convention of phases 1–3. Reads both findings files, calls `reconcile()` → `map_finding()`, writes `mapped_findings.json`.
-- **Locked-in design decisions** (see `docs/nist_mapping_reference.md`, not yet written — currently only recorded here and in team notes):
+- **Locked-in design decisions** (see `docs/nist_mapping_reference.md` — fully written and populated):
   - Anomaly findings are **informational-only, by design** — they never escalate to MANAGE, because no externally-defensible anomaly-severity cutoff exists (same reasoning as the unjustified injection rate, §12). Manufacturing one just to exercise the MANAGE path would repeat that problem, not solve it.
   - `recalibration_required` is documented directly in the YAML: `protected_attributes`, `fairness.min_group_size_warning`, and `fairness.significance_level` will not transfer correctly to a different (e.g. a sponsoring company's) dataset without human review — this is disclosed proactively, not discovered live during a demo.
 - **What this module deliberately does NOT do:** GOVERN-function coverage. NIST's GOVERN function (organizational accountability, training, documented risk tolerance) cannot be evidenced by a tool inspecting model outputs — it's the deploying organization's responsibility. VERITAS automates evidence generation for MEASURE and produces citations into MAP and MANAGE; it does not, and structurally cannot, automate GOVERN.
@@ -469,7 +588,7 @@ Everything above is verified by `tests/test_compliance_mapping.py` (see §11) ag
 
 ## 11. Testing
 
-**An automated `pytest` suite exists: 84 tests across all modules.**
+**An automated `pytest` suite exists: 134 tests across all modules, 100% passing.**
 
 ```bash
 # Run all tests:
@@ -514,7 +633,7 @@ python -m pytest tests/ -q
 | Phase 2's precision/recall evaluation does not yet break down by anomaly type | **Open.** `ground_truth_anomaly_type` is written by phase 1 and validated by the schema, but `isolation_forest.py`'s evaluation still reports a single aggregate precision/recall against the overall `ground_truth_operational_anomaly` bool. | Wire a per-type breakdown before citing detection performance on any individual pattern (especially `duplicate_record`, which should show near-zero recall and is expected to) |
 | Two threshold-selection methods for IsolationForest contamination can disagree substantially | **Open for interpretation.** The unsupervised knee and supervised grid search can produce very different rates; the pipeline emits a warning, but the discrepancy alone does not establish which threshold is appropriate. | Inspect flagged records and justify the operating threshold before citing detector performance |
 | `config/thresholds.yaml` as a separate file (shown in earlier README drafts and repo trees) | **Resolved — was never actually built.** All configuration, including fairness thresholds, lives in a single `config/config.yaml`. | This README previously misrepresented the repo structure; corrected here |
-| No automated test suite | **Resolved.** 84 tests across all five modules (§11). No CI wiring is currently documented. | Continue running the full suite locally; add CI before relying on automated pull-request checks |
+| No automated test suite | **Resolved.** 134 tests across all five modules (§11). No CI wiring is currently documented. | Continue running the full suite locally; add CI before relying on automated pull-request checks |
 | Prior tech-stack framing implied an "optional LLM assist" path alongside "deterministic rules engine" | **Resolved.** Architecture is stated as deterministic-only throughout this document. | If an LLM-assist path is ever reintroduced, this document and the module diagram must be updated together |
 | Phase 4 was designed against an assumed Phase 2/3 output schema before their real source was reviewed | **Resolved, but worth recording as a process lesson.** `AnomalyFinding` has `is_anomaly: bool`, not a `severity_tier`; Phase 2's findings list includes every record, not just flagged ones; `FairnessFinding` is one row per attribute with all three metrics inline, not per-metric records. `input_reconciler.py` was rewritten against the real schemas after reading the actual source. | Any future module built against an "assumed" contract for an already-built upstream module should be verified against real source before being treated as done |
 | Anomaly findings are permanently `informational` — can never trigger a MANAGE-stage response | **Resolved as an explicit design decision, not a gap.** No externally-defensible anomaly-severity cutoff exists (same reasoning as the unbenchmarked injection rate above); manufacturing one to exercise the MANAGE path would repeat that exact problem. Revisit only if an external anomaly-severity standard is identified. | State this as a deliberate scope boundary if asked, not as an oversight |
@@ -537,7 +656,7 @@ python -m pytest tests/ -q
 - [x] Decide and implement a numeric threshold approach for `demographic_parity_difference` and `equalized_odds_difference` — done via permutation significance test
 - [x] Design and build the Compliance Mapping Engine (phase 4) — core logic and CLI entrypoint built
 - [x] Build the explainability trace from threshold gate through to control ID assignment
-- [x] Write an actual `pytest` suite — 84 tests across all modules
+- [x] Write an actual `pytest` suite — **134 tests across all modules**, 100% passing
 - [x] Build a CLI entrypoint for the Compliance Mapping Engine (`python -m src.compliance_mapping.run_mapping`)
 - [x] Build `src/orchestrator.py` with concurrent execution, SHA-256 manifests, and in-memory execution mode
 - [x] Build modular `VeritasPipeline` in `src/pipeline.py` for programmatic invocation
@@ -547,6 +666,9 @@ python -m pytest tests/ -q
 - [x] Build the Report Generator (phase 5) — HTML report and PDF rendered from the DOCX template
 - [x] Populate `docs/nist_mapping_reference.md`, `docs/module_contracts.md`, and `docs/architecture.md`
 - [ ] Consider an end-to-end test approximating MEASURE 2.13 (TEVV process effectiveness) — confirm the pipeline detects a known-bad classifier and does not false-positive on a known-fair one, beyond the current unit-level permutation-test coverage
+- [x] **Phase 6 — Agentic AI Upgrade:** 6 LangGraph agents (Schema Inference, Anomaly Grouper, Config Proposer, Human-in-the-Loop Approval Gate, Explanation Rewriter + Verifier, Q&A Assistant) with durable SqliteSaver checkpointing — built and tested
+- [x] **Phase 7 — Full-Stack Web Application:** FastAPI backend + Next.js 14 TypeScript frontend with luxury glassmorphism UI, hand-crafted SVG disparity charts, pre-flight governance review screen, and Agent-6 conversational assistant — built and verified
+- [x] **CEO Demonstration Guide:** end-to-end demonstration script with sample dataset, act-by-act walkthrough, and answers to tough executive questions — written and ready
 
 ---
 

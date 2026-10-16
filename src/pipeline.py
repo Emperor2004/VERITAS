@@ -20,6 +20,7 @@ from src.compliance_mapping.run_mapping import run_mapping
 from src.compliance_mapping.rules_engine import load_lookup_table
 from src.report_generator.html_report import render_html_report, write_html_report
 from src.report_generator.pdf_report import write_pdf_report
+from src.run_config import RunConfig
 
 
 @dataclass
@@ -31,6 +32,7 @@ class PipelineArtifacts:
     mapped_findings: Optional[List[Dict[str, Any]]] = None
     report_html: Optional[str] = None
     report_pdf_generated: bool = False
+    effective_run_config: Optional[Dict[str, Any]] = None
 
 
 class VeritasPipeline:
@@ -42,6 +44,7 @@ class VeritasPipeline:
         lookup_path: str | Path = "src/compliance_mapping/nist_control_lookup.yaml",
     ):
         self.config = config
+        self.run_config = RunConfig.from_project_config(config)
         self.lookup_path = Path(lookup_path)
         self._lookup_table = None
 
@@ -73,19 +76,20 @@ class VeritasPipeline:
         contamination_override: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Phase 2: Detect operational and statistical anomalies via IsolationForest."""
-        ad_cfg = self.config.get("anomaly_detection", {})
-        random_state = ad_cfg.get("random_state", 42)
-        n_estimators = ad_cfg.get("n_estimators", 100)
         return run_anomaly_detection(
             records=records,
-            random_state=random_state,
-            n_estimators=n_estimators,
-            contamination_override=contamination_override,
+            random_state=self.run_config.isolation_forest_random_state,
+            n_estimators=self.run_config.isolation_forest_n_estimators,
+            contamination_override=(
+                contamination_override
+                if contamination_override is not None
+                else self.run_config.contamination_override
+            ),
         )
 
     def run_fairness_scan(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Phase 3: Compute disparate impact, parity difference, and equalized odds."""
-        return run_fairness_scan(records, self.config)
+        return run_fairness_scan(records, self.run_config)
 
     def run_compliance_mapping(
         self,
@@ -120,6 +124,7 @@ class VeritasPipeline:
             PipelineArtifacts: Container with all generated in-memory artifacts.
         """
         artifacts = PipelineArtifacts()
+        artifacts.effective_run_config = self.run_config.to_effective_dict()
 
         # Phase 1: Ingestion
         artifacts.normalized_logs = self.run_ingestion(limit=limit)
@@ -152,6 +157,9 @@ class VeritasPipeline:
 
             with open(logs_dir / "mapped_findings.json", "w", encoding="utf-8") as f:
                 json.dump({"mapped_findings": artifacts.mapped_findings}, f, indent=2, default=str)
+
+            with open(logs_dir / "effective_run_config.json", "w", encoding="utf-8") as f:
+                json.dump(artifacts.effective_run_config, f, indent=2)
 
             html_dest = reports_dir / "audit_report.html"
             html_dest.write_text(artifacts.report_html, encoding="utf-8")

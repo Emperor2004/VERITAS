@@ -33,9 +33,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+from src.run_config import RunConfig
 
 PY = sys.executable
 
@@ -76,8 +80,9 @@ PIPELINE: list[list[Stage]] = [
         Stage(
             name="anomaly_detection", phase=2,
             cmd=[PY, "-m", "src.anomaly_detection.isolation_forest",
-                 "--input", NORMALIZED, "--output", ANOMALY],
-            inputs=[NORMALIZED],
+                  "--input", NORMALIZED, "--output", ANOMALY,
+                  "--config", "config/config.yaml"],
+              inputs=[NORMALIZED, "config/config.yaml"],
             outputs=[ANOMALY],
         ),
         Stage(
@@ -244,6 +249,10 @@ def main() -> int:
         "platform": platform.platform(),
         "git": git_state(root),
         "config_sha256": {c: sha256(root / c) if (root / c).is_file() else None for c in CONFIG_FILES},
+        "effective_run_config": RunConfig.from_project_config(
+            yaml.safe_load((root / "config" / "config.yaml").read_text(encoding="utf-8")),
+            input_mode="adult_income",
+        ).to_effective_dict(),
         "selection": {"from": args.from_phase, "to": args.to_phase, "only": args.only},
         "stages": [],
         "success": False,

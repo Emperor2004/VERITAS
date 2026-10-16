@@ -1,0 +1,80 @@
+# Explanation templates for VERITAS plain-English finding descriptions.
+#
+# Placeholders use Python str.format_map() syntax.  Available keys per
+# finding type are documented inline.  All numeric placeholders must
+# match a field that exists in the source MappedFinding so the verifier
+# can confirm the number is correct.
+#
+# Verifier rule: every number that appears in rendered text must round
+# to the corresponding source-finding field value (2 decimal places for
+# ratios/differences, 4 for anomaly scores).
+
+fairness_finding:
+
+  disparate_impact_ratio:
+    violation:
+      what: >-
+        The model gives the positive outcome to {minority_pct:.0%} of
+        {minority_group} but {majority_pct:.0%} of {majority_group}, a
+        disparate impact ratio of {observed_value:.2f}.
+      why: >-
+        The EEOC four-fifths rule requires a ratio of at least
+        {threshold:.2f}. At {observed_value:.2f} the model may be
+        treating {minority_group} unfairly, creating legal and
+        reputational risk.
+    informational:
+      what: >-
+        The disparate impact ratio for {attribute} is {observed_value:.2f}
+        ({minority_group} vs {majority_group}).
+      why: >-
+        This is at or above the EEOC four-fifths threshold of
+        {threshold:.2f} and is noted for ongoing monitoring.
+
+  demographic_parity_difference:
+    violation:
+      what: >-
+        The demographic parity difference for {attribute} is
+        {observed_value:.4f} (permutation p-value = {p_value:.3f}).
+      why: >-
+        The permutation significance test (α = {significance_level}) flags
+        this as a statistically significant gap in positive-outcome rates
+        across {attribute} groups.
+    informational:
+      what: >-
+        The demographic parity difference for {attribute} is
+        {observed_value:.4f} (permutation p-value = {p_value:.3f}).
+      why: >-
+        The difference is not statistically significant at α =
+        {significance_level} and is recorded for monitoring.
+
+  equalized_odds_difference:
+    violation:
+      what: >-
+        The equalized odds difference for {attribute} is
+        {observed_value:.4f} (permutation p-value = {p_value:.3f}).
+      why: >-
+        The permutation significance test (α = {significance_level}) flags
+        this as a statistically significant difference in error rates across
+        {attribute} groups, meaning the model performs unequally for
+        different groups.
+    informational:
+      what: >-
+        The equalized odds difference for {attribute} is
+        {observed_value:.4f} (permutation p-value = {p_value:.3f}).
+      why: >-
+        The difference is not statistically significant at α =
+        {significance_level} and is recorded for monitoring.
+
+anomaly_finding:
+
+  is_anomaly:
+    informational:
+      what: >-
+        Record {source_record_id} received an anomaly score of
+        {observed_value:.4f}. Top contributing features:
+        {top_features_str}.
+      why: >-
+        Outliers in prediction logs can indicate data-entry errors, system
+        faults, or unusual operational conditions.  This finding is
+        informational — no externally defensible anomaly-severity threshold
+        exists to justify escalation.

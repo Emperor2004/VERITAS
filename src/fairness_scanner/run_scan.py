@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from typing import Mapping
 import yaml
 
 from src.fairness_scanner.metrics import (
@@ -19,9 +20,10 @@ from src.fairness_scanner.metrics import (
     PROTECTED_COL_PREFIX,
 )
 from src.fairness_scanner.output_schema import validate_output
+from src.run_config import RunConfig
 
 
-def run_fairness_scan(records: list, config: dict) -> dict:
+def run_fairness_scan(records: list, config: Mapping | RunConfig) -> dict:
     """Run fairness scan across all protected attributes present in records.
 
     Args:
@@ -31,15 +33,38 @@ def run_fairness_scan(records: list, config: dict) -> dict:
     Returns:
         dict: Findings dictionary matching output_schema.py.
     """
-    fairness_cfg = config.get("fairness", {})
-    eeoc_threshold = fairness_cfg.get("disparate_impact_ratio_threshold", 0.8)
-    min_group_size = fairness_cfg.get("min_group_size_warning", 30)
-    significance_level = fairness_cfg.get("significance_level", 0.05)
-    n_permutations = fairness_cfg.get("permutations", 1000)
-    permutation_random_state = fairness_cfg.get("permutation_random_state", 42)
+    run_config = (
+        config
+        if isinstance(config, RunConfig)
+        else RunConfig.from_project_config(config)
+    )
+    eeoc_threshold = run_config.disparate_impact_ratio_threshold
+    min_group_size = run_config.min_group_size_warning
+    significance_level = run_config.significance_level
+    n_permutations = run_config.permutations
+    permutation_random_state = run_config.permutation_random_state
 
     df = build_frame(records)
-    protected_cols = [c for c in df.columns if c.startswith(PROTECTED_COL_PREFIX)]
+    available_attributes = [
+        c.replace(PROTECTED_COL_PREFIX, "")
+        for c in df.columns
+        if c.startswith(PROTECTED_COL_PREFIX)
+    ]
+    if run_config.protected_attributes:
+        missing_attributes = set(run_config.protected_attributes) - set(available_attributes)
+        if missing_attributes:
+            raise ValueError(
+                "Configured protected attribute(s) missing from records: "
+                f"{sorted(missing_attributes)}. Available attributes: {available_attributes}."
+            )
+        protected_cols = [
+            f"{PROTECTED_COL_PREFIX}{attribute}"
+            for attribute in run_config.protected_attributes
+        ]
+    else:
+        protected_cols = [
+            c for c in df.columns if c.startswith(PROTECTED_COL_PREFIX)
+        ]
 
     findings = []
     for col in protected_cols:
@@ -70,8 +95,8 @@ def main():
     parser.add_argument("--config", default="config/config.yaml")
     args = parser.parse_args()
 
-    with open(args.config) as f:
-        config = yaml.safe_load(f)
+    with open(args.config, encoding="utf-8") as f:
+        config = RunConfig.from_project_config(yaml.safe_load(f))
 
     print("[phase3] loading normalized log...")
     records = load_normalized_log(args.input)

@@ -1,0 +1,165 @@
+# Remediation catalog for VERITAS.
+#
+# Each entry has a stable `id`, a `text` with optional {placeholders},
+# an `effort` rating (low / medium / high), and a `source` citation.
+# Entries with no external citation are tagged `internal_design_choice`
+# to match the README convention of disclosing unsourced parameters.
+#
+# The verifier requires that every fix step in a rendered explanation
+# maps to a valid id in this catalog.  Free-form advice is rejected.
+
+fairness:
+
+  disparate_impact_ratio:
+    violation:
+      - id: FAIR-001
+        text: >-
+          Check whether {minority_group} is under-represented or labelled
+          differently in the training data compared with {majority_group}.
+        effort: low
+        source: >-
+          Mehrabi et al., "A Survey on Bias and Fairness in Machine
+          Learning", ACM Computing Surveys 54(6), 2021.
+          https://dl.acm.org/doi/10.1145/3457607
+
+      - id: FAIR-002
+        text: >-
+          Review all input features for columns that may act as proxies
+          for {attribute} (e.g. postcode, surname, school).
+        effort: medium
+        source: >-
+          Mehrabi et al., ACM Computing Surveys 2021
+          (see proxy features, section 2.3).
+
+      - id: FAIR-003
+        text: >-
+          Retrain the model with a fairness mitigation method such as
+          Fairlearn's ExponentiatedGradient or ThresholdOptimizer,
+          then re-run this audit to verify improvement.
+        effort: high
+        source: >-
+          Microsoft Fairlearn documentation — mitigation algorithms.
+          https://fairlearn.org/v0.10/user_guide/mitigation/index.html
+
+      - id: FAIR-004
+        text: >-
+          Document the disparity finding, the decision taken, and the
+          rationale in the model card or risk register.  Add ongoing
+          monitoring of the disparate impact ratio.
+        effort: low
+        source: internal_design_choice
+
+    informational:
+      - id: FAIR-900
+        text: >-
+          No corrective action is required at this time.  Continue
+          monitoring the disparate impact ratio across {attribute} groups
+          at each model update cycle.
+        effort: low
+        source: internal_design_choice
+
+  demographic_parity_difference:
+    violation:
+      - id: FAIR-011
+        text: >-
+          Investigate the distribution of positive-outcome predictions
+          across {attribute} groups in both the training data and the
+          current prediction log.
+        effort: medium
+        source: internal_design_choice
+
+      - id: FAIR-012
+        text: >-
+          Consider post-processing threshold adjustment to equalise
+          positive-outcome rates (e.g. Fairlearn ThresholdOptimizer
+          with demographic_parity constraint).
+        effort: high
+        source: >-
+          Fairlearn documentation.
+          https://fairlearn.org/v0.10/user_guide/mitigation/postprocessing.html
+
+      - id: FAIR-013
+        text: >-
+          Document the parity gap, the statistical test result
+          (p = {p_value:.3f}, α = {significance_level}), and the action
+          taken in the model card or risk register.
+        effort: low
+        source: internal_design_choice
+
+    informational:
+      - id: FAIR-910
+        text: >-
+          No corrective action is required at this time.  Monitor
+          demographic parity difference across {attribute} groups at
+          each model update cycle.
+        effort: low
+        source: internal_design_choice
+
+  equalized_odds_difference:
+    violation:
+      - id: FAIR-021
+        text: >-
+          Investigate whether false positive or false negative rates
+          differ across {attribute} groups; identify which error type
+          drives the gap.
+        effort: medium
+        source: internal_design_choice
+
+      - id: FAIR-022
+        text: >-
+          Apply an equalized-odds post-processing mitigation
+          (e.g. Fairlearn ThresholdOptimizer with equalized_odds
+          constraint) and re-run this audit to verify improvement.
+        effort: high
+        source: >-
+          Fairlearn documentation.
+          https://fairlearn.org/v0.10/user_guide/mitigation/postprocessing.html
+
+      - id: FAIR-023
+        text: >-
+          Document the equalized odds finding, the statistical test
+          result (p = {p_value:.3f}, α = {significance_level}), and
+          the action taken in the model card or risk register.
+        effort: low
+        source: internal_design_choice
+
+    informational:
+      - id: FAIR-920
+        text: >-
+          No corrective action is required at this time.  Monitor
+          equalized odds difference across {attribute} groups at each
+          model update cycle.
+        effort: low
+        source: internal_design_choice
+
+anomaly:
+
+  is_anomaly:
+    informational:
+      - id: ANOM-001
+        text: >-
+          Check the source system for record {source_record_id} to
+          confirm the values are not a logging or data-entry error.
+        effort: low
+        source: internal_design_choice
+
+      - id: ANOM-002
+        text: >-
+          If the values are confirmed errors, correct or exclude them
+          and document the reason in the audit trail.
+        effort: low
+        source: internal_design_choice
+
+      - id: ANOM-003
+        text: >-
+          If the values are genuine, investigate the operational cause
+          and add targeted monitoring for similar records.
+        effort: medium
+        source: internal_design_choice
+
+      - id: ANOM-004
+        text: >-
+          Add the flagged pattern to the anomaly-detection configuration
+          for the next model review cycle.
+        effort: low
+        source: internal_design_choice
