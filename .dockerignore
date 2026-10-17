@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python & Virtual Environments
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Databases & local state
+veritas.db
+*.sqlite
+*.sqlite3
+outputs/
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/synthetic_logs/*
+!data/synthetic_logs/.gitkeep
+
+# Node & Next.js (from frontend directory)
+frontend/node_modules/
+frontend/.next/
+frontend/.turbo/
+node_modules/
+.next/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+*.tmp
+.kilo/

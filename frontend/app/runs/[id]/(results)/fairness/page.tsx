@@ -53,7 +53,7 @@ export default function FairnessPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-rule/60">
-              {findings.map((f, i) => {
+              {findings.map((f: any, i: number) => {
                 const isViolation = Boolean(
                   f.disparate_impact_violation ||
                   f.demographic_parity_violation ||

@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -153,9 +154,13 @@ def run_stage(stage: Stage, root: Path, log_dir: Path) -> dict:
 
     log_path = log_dir / f"phase{stage.phase}_{stage.name}.log"
     start = time.monotonic()
+    stage_env = dict(os.environ)
+    stage_env.setdefault("OPENBLAS_NUM_THREADS", "1")
+    stage_env.setdefault("OMP_NUM_THREADS", "1")
+    stage_env.setdefault("MKL_NUM_THREADS", "1")
     try:
         with log_path.open("w") as log:
-            proc = subprocess.run(stage.cmd, cwd=root, stdout=log, stderr=subprocess.STDOUT)
+            proc = subprocess.run(stage.cmd, cwd=root, stdout=log, stderr=subprocess.STDOUT, env=stage_env)
         result["returncode"] = proc.returncode
     except OSError as exc:
         result["error"] = f"could not launch: {exc}"

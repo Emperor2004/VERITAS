@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+
+  // Standalone output for Docker production builds — bundles only required
+  // node_modules into .next/standalone, reducing image size by ~90%.
+  output: 'standalone',
+
   async rewrites() {
     return [
       {

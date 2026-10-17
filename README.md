@@ -40,6 +40,12 @@ Each phase has a standalone CLI. Phases 1–5 can also run through the subproces
 - [6. Installation](#6-installation)
 - [7. Configuration](#7-configuration)
 - [8. Running VERITAS](#8-running-veritas)
+  - [8.1 Full Pipeline with Audit Manifest](#81-full-pipeline-with-audit-manifest)
+  - [8.2 In-Memory Python API](#82-in-memory-python-api)
+  - [8.3 Run Modules Independently (CLI)](#83-run-modules-independently-cli)
+  - [8.4 Streamlit Dashboard (Legacy)](#84-streamlit-dashboard-legacy)
+  - [8.5 Full-Stack Web Application (FastAPI + Next.js)](#85-full-stack-web-application-fastapi--nextjs)
+  - [8.6 Docker Compose & Production Deployment](#86-docker-compose--production-deployment)
 - [9. Module Reference](#9-module-reference)
 - [10. NIST AI RMF Mapping Approach](#10-nist-ai-rmf-mapping-approach)
 - [11. Testing](#11-testing)
@@ -545,6 +551,30 @@ Open **`http://localhost:3000`** in your browser.
 > If neither is configured, VERITAS runs in **deterministic mode** — all 5 statistical pipeline phases execute normally; only the agentic narration steps are skipped.
 
 **Demo dataset:** Upload `data/demo_audit_dataset.csv` — a pre-built 500-record CSV with deliberate fairness and anomaly signals — on the Upload page. Full demonstration script: [`VERITAS_CEO_Demonstration_Guide.md`](./VERITAS_CEO_Demonstration_Guide.md).
+
+### 8.6 Docker Compose & Production Deployment
+
+For production, enterprise, or team deployments, VERITAS provides automated containerization with multi-stage Docker builds, non-root users, health checking, and internal networking:
+
+```bash
+# 1. Configure environment
+cp .env.example .env
+
+# 2. Build and start containers
+docker compose up --build -d
+
+# 3. Verify health and logs
+docker compose ps
+docker compose logs -f
+```
+
+- **Frontend:** Available at `http://localhost:3000` (Next.js 14 standalone bundle, ~90% reduced image size)
+- **Backend:** Available at `http://localhost:8000` (FastAPI + Gunicorn with Uvicorn workers)
+- **Persistent Data:** Named Docker volume `veritas-data` stores SQLite audit databases and outputs across restarts
+- **SSL / HTTPS & Domain Setup:** Pre-configured Nginx reverse proxy configuration available in `nginx/nginx.conf`
+- **CI/CD Pipeline:** Fully configured GitHub Actions workflow (`.github/workflows/ci.yml`) validates backend tests (Python 3.10, 3.11, 3.12), frontend TypeScript, Next.js build, and Docker builds on every push
+
+See the complete [**Production Deployment Guide (`docs/DEPLOYMENT.md`)**](docs/DEPLOYMENT.md) for Nginx SSL termination, backup automation, and cloud hosting instructions.
 
 ---
 

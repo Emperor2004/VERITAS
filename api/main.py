@@ -14,7 +14,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from api.routes_meta import router as meta_router
 from api.routes_runs import router as runs_router, set_audit_graph
-from api.settings import CHECKPOINT_DB_PATH, DB_PATH
+from api.settings import ALLOWED_ORIGINS, CHECKPOINT_DB_PATH, DB_PATH
 from api.store import init_db
 from src.agentic.graph import build_audit_graph
 
@@ -47,7 +47,7 @@ app = FastAPI(
 # Cross-Origin Resource Sharing (CORS) for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

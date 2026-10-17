@@ -1,0 +1,87 @@
+# =============================================================================
+# VERITAS — Docker Compose (Production Deployment)
+# =============================================================================
+# Usage:
+#   docker compose up -d           # Start all services
+#   docker compose down            # Stop all services
+#   docker compose logs -f         # Tail logs
+#   docker compose ps              # Check status
+#
+# For first-time setup:
+#   cp .env.example .env           # Configure your LLM provider key
+#   docker compose up --build -d   # Build and start
+# =============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # FastAPI Backend (Python)
+  # --------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: veritas-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=8000
+      - WORKERS=2
+      - VERITAS_DB_PATH=/app/outputs/api_data/veritas_runs.sqlite
+      - VERITAS_CHECKPOINT_DB_PATH=/app/outputs/api_data/checkpoints.sqlite
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # Persist SQLite databases and pipeline outputs across container restarts
+      - veritas-data:/app/outputs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    networks:
+      - veritas-net
+
+  # --------------------------------------------------------------------------
+  # Next.js Frontend (Node.js)
+  # --------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_API_URL: http://backend:8000
+    container_name: veritas-frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - BACKEND_API_URL=http://backend:8000
+      - PORT=3000
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    networks:
+      - veritas-net
+
+# --------------------------------------------------------------------------
+# Persistent volumes
+# --------------------------------------------------------------------------
+volumes:
+  veritas-data:
+    driver: local
+
+# --------------------------------------------------------------------------
+# Internal network
+# --------------------------------------------------------------------------
+networks:
+  veritas-net:
+    driver: bridge

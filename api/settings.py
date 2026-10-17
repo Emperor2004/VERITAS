@@ -29,3 +29,11 @@ MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 MAX_ROWS = 100_000
 MAX_COLUMNS = 100
 DEFAULT_PAGE_SIZE = 50
+
+# CORS Origins
+cors_origins_env = os.environ.get("VERITAS_CORS_ORIGINS", "").strip()
+if cors_origins_env:
+    ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+else:
+    ALLOWED_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+

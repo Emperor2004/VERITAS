@@ -1,0 +1,74 @@
+# =============================================================================
+# VERITAS — FastAPI Backend (Production)
+# =============================================================================
+# Multi-stage build: deps → runtime
+# Usage:
+#   docker build -f Dockerfile.backend -t veritas-backend .
+#   docker run -p 8000:8000 --env-file .env veritas-backend
+# =============================================================================
+
+# --- Stage 1: Build dependencies ---
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install system dependencies required for building Python packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc g++ && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt && \
+    pip install --no-cache-dir --prefix=/install gunicorn>=22.0
+
+
+# --- Stage 2: Production runtime ---
+FROM python:3.11-slim AS runtime
+
+# Security: run as non-root
+RUN groupadd -r veritas && useradd -r -g veritas -d /app -s /sbin/nologin veritas
+
+WORKDIR /app
+
+# Copy installed Python packages from builder
+COPY --from=builder /install /usr/local
+
+# Copy application code
+COPY api/ ./api/
+COPY src/ ./src/
+COPY config/ ./config/
+COPY data/demo_audit_dataset.csv ./data/demo_audit_dataset.csv
+
+# Create writable directories for runtime data
+RUN mkdir -p outputs/api_data outputs/logs outputs/reports data/raw data/processed data/synthetic_logs && \
+    chown -R veritas:veritas /app
+
+# Environment defaults (overridable at runtime via --env-file or -e)
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    VERITAS_DB_PATH=/app/outputs/api_data/veritas_runs.sqlite \
+    VERITAS_CHECKPOINT_DB_PATH=/app/outputs/api_data/checkpoints.sqlite \
+    PORT=8000 \
+    WORKERS=2
+
+EXPOSE ${PORT}
+
+# Health check (Docker native — used by compose, Kubernetes, etc.)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${PORT}/api/health')" || exit 1
+
+USER veritas
+
+# Production server: Gunicorn with Uvicorn workers
+# - preload for faster worker startup
+# - graceful timeout for long-running audit pipelines
+CMD gunicorn api.main:app \
+    --bind 0.0.0.0:${PORT} \
+    --workers ${WORKERS} \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --timeout 300 \
+    --graceful-timeout 30 \
+    --access-logfile - \
+    --error-logfile - \
+    --preload

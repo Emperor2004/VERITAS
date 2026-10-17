@@ -16,6 +16,11 @@ def test_report_stage_manifest_records_effective_config_and_both_reports(tmp_pat
     mapped_path.parent.mkdir(parents=True)
     mapped_path.write_text(json.dumps({"mapped_findings": []}), encoding="utf-8")
 
+    import os
+    env = dict(os.environ)
+    env["OPENBLAS_NUM_THREADS"] = "1"
+    env["OMP_NUM_THREADS"] = "1"
+
     result = subprocess.run(
         [
             sys.executable,
@@ -27,6 +32,7 @@ def test_report_stage_manifest_records_effective_config_and_both_reports(tmp_pat
         text=True,
         timeout=30,
         check=False,
+        env=env,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
