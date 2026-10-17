@@ -7,6 +7,14 @@ from pathlib import Path
 # Paths
 API_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = API_DIR.parent
+
+# Load environment variables from .env in project root if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv(PROJECT_ROOT / ".env")
+except ImportError:
+    pass
+
 CONFIG_PATH = PROJECT_ROOT / "config" / "config.yaml"
 LOOKUP_PATH = PROJECT_ROOT / "src" / "compliance_mapping" / "nist_control_lookup.yaml"
 

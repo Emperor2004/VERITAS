@@ -75,6 +75,7 @@ langchain-core>=0.2       # Low-level primitives (required by langgraph)
 fastapi>=0.111            # REST API framework
 uvicorn[standard]>=0.29   # ASGI server (includes websocket + h11 extras)
 python-multipart>=0.0.9   # Required by FastAPI for UploadFile / Form handling
+python-dotenv>=1.0        # Automatic .env loading
 httpx>=0.27               # Async HTTP client (used in tests and API calls)
 
 # ---------------------------------------------------------------------------

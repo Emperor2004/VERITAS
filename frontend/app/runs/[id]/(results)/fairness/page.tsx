@@ -17,7 +17,7 @@ export default function FairnessPage() {
     queryFn: () => fetchFairness(runId),
   });
 
-  const findings = data?.items || [];
+  const findings = Array.isArray(data) ? data : (data?.items || (data as any)?.findings || []);
 
   return (
     <div className="space-y-6">

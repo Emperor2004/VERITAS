@@ -139,6 +139,7 @@ export interface RunRecord {
   approved_at?: string;
   rejected_by?: string;
   rejected_at?: string;
+  row_count?: number;
   created_at?: string;
   updated_at?: string;
   review?: RunReviewPayload;
@@ -270,7 +271,28 @@ export async function fetchAnomalies(id: string, page = 1, size = 50): Promise<{
 export async function fetchFairness(id: string): Promise<{ total: number; items: FairnessFinding[] }> {
   const res = await fetch(`${API_BASE}/runs/${id}/fairness`);
   if (!res.ok) throw new Error('Failed to fetch fairness findings');
-  return res.json();
+  const json = await res.json();
+  if (json && Array.isArray(json.findings)) {
+    const items = json.findings.map((f: any) => ({
+      attribute: f.attribute || f.protected_attribute,
+      protected_attribute: f.attribute || f.protected_attribute,
+      metric: 'Disparate Impact Ratio',
+      value: f.disparate_impact_ratio ?? f.value,
+      disparity_ratio: f.disparate_impact_ratio,
+      threshold: f.eeoc_four_fifths_threshold ?? 0.8,
+      violation: Boolean(f.disparate_impact_violation || f.demographic_parity_violation || f.equalized_odds_violation),
+      disparate_impact_violation: f.disparate_impact_violation,
+      demographic_parity_violation: f.demographic_parity_violation,
+      equalized_odds_violation: f.equalized_odds_violation,
+      group_selection_rates: f.group_selection_rates,
+      group_sizes: f.group_sizes,
+    }));
+    return { total: items.length, items };
+  }
+  if (Array.isArray(json)) {
+    return { total: json.length, items: json };
+  }
+  return json;
 }
 
 export async function fetchFindings(id: string, severityTier?: 'violation' | 'informational'): Promise<{ total: number; items: MappedFinding[] }> {
@@ -279,7 +301,11 @@ export async function fetchFindings(id: string, severityTier?: 'violation' | 'in
     : `${API_BASE}/runs/${id}/findings`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Failed to fetch findings');
-  return res.json();
+  const json = await res.json();
+  if (Array.isArray(json)) {
+    return { total: json.length, items: json };
+  }
+  return json;
 }
 
 export async function fetchAnomalyClusters(id: string): Promise<{ clusters: AnomalyCluster[] }> {

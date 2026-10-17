@@ -101,10 +101,10 @@ export default function RunsHistoryPage() {
                 {r.summary && (
                   <div className="text-right text-xs">
                     <span className="font-mono font-bold text-ink">
-                      {r.summary.total_records.toLocaleString()} rows
+                      {((r.summary.total_records ?? r.row_count ?? 0) as number).toLocaleString()} rows
                     </span>
                     <div className="text-[11px] text-ink-soft">
-                      {r.summary.fairness_violations} violations · {r.summary.anomalies_detected} outliers
+                      {r.summary.fairness_violations ?? 0} violations · {r.summary.anomalies_detected ?? (r.summary as any).anomaly_total ?? 0} outliers
                     </div>
                   </div>
                 )}

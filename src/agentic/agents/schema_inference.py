@@ -219,8 +219,10 @@ def infer_schema_llm(
     )
 
     try:
+        from src.agentic.llm_client import extract_text_from_response
+
         response = llm_client.invoke(prompt)
-        text = response.content if hasattr(response, "content") else str(response)
+        text = extract_text_from_response(response)
         
         # Parse JSON from response
         json_match = re.search(r"\{.*\}", text, re.DOTALL)

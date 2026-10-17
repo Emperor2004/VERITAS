@@ -306,7 +306,14 @@ def build_audit_graph(
 
     def report_agent(state: AgenticGraphState) -> dict[str, Any]:
         audit = _audit_state(state)
-        html = render_html_report(audit.mapped_findings)
+        metadata = {
+            "run_id": audit.run_id,
+            "upload_name": audit.validation_summary.get("filename") or "audit_dataset.csv",
+            "row_count": len(audit.records),
+            "approved_by": audit.approval_record.approved_by if audit.approval_record else None,
+            "config_fingerprint": audit.approval_record.config_hash[:8] if (audit.approval_record and audit.approval_record.config_hash) else None,
+        }
+        html = render_html_report(audit.mapped_findings, run_metadata=metadata)
         return {
             "status": "reporting",
             "report_html": html,

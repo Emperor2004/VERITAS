@@ -45,6 +45,7 @@ from dashboard.utils.data_adapter import (
     validate_uploaded_dataframe,
 )
 from src.agentic.agents.qa_agent import AuditQAAgent, ToolNotAllowedError
+from src.report_generator.html_report import render_html_report
 from src.report_generator.pdf_report import render_pdf_report
 from src.run_config import RunConfig
 
@@ -212,7 +213,22 @@ def get_run(run_id: str):
 
     summary = None
     if run.get("results"):
-        summary = build_summary(run["results"])
+        raw_sum = build_summary(run["results"])
+        summary = {
+            "run_id": run["run_id"],
+            "timestamp": run.get("updated_at") or run["created_at"],
+            "total_records": run.get("row_count", 0),
+            "anomalies_detected": raw_sum.get("anomaly_total", 0),
+            "fairness_violations": raw_sum.get("fairness_violations", 0),
+            "nist_violations": raw_sum.get("mapped_violation_count", 0),
+            "nist_informational": raw_sum.get("mapped_informational_count", 0),
+            "total_findings": raw_sum.get("total_findings", 0),
+            "status": run["status"],
+            "config_fingerprint": run.get("config_fingerprint"),
+            "anomaly_total": raw_sum.get("anomaly_total", 0),
+            "mapped_violation_count": raw_sum.get("mapped_violation_count", 0),
+            "mapped_informational_count": raw_sum.get("mapped_informational_count", 0),
+        }
 
     val_sum = run.get("validation_summary") or {}
     roles = val_sum.get("detected_roles") or {}
@@ -467,11 +483,22 @@ def get_report_html(run_id: str):
     if not run or not run.get("results"):
         raise HTTPException(status_code=404, detail="Report not found.")
 
-    html = run["results"].get("report_html", "<html><body>No report generated</body></html>")
+    mapped_findings = run["results"].get("mapped_findings", [])
+    metadata = {
+        "run_id": run["run_id"],
+        "upload_name": run.get("upload_name", "dataset.csv"),
+        "row_count": run.get("row_count", 0),
+        "status": run.get("status"),
+        "approved_by": run.get("approved_by"),
+        "config_fingerprint": run.get("config_fingerprint"),
+        "created_at": run.get("created_at"),
+        "updated_at": run.get("updated_at"),
+    }
+    html = render_html_report(mapped_findings, run_metadata=metadata)
     return HTMLResponse(
         content=html,
         headers={
-            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:;",
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;",
             "X-Content-Type-Options": "nosniff",
             "X-Frame-Options": "SAMEORIGIN",
         },

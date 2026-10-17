@@ -30,9 +30,43 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any, Optional
 
+try:
+    from dotenv import load_dotenv
+
+    # Locate project root (src/agentic/../../) and load .env
+    _project_root = Path(__file__).resolve().parents[2]
+    load_dotenv(_project_root / ".env")
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
+
+
+def extract_text_from_response(response: Any) -> str:
+    """Extract plain string content from a LangChain AIMessage or response.
+
+    Handles LangChain responses where response.content can be either a string
+    or a list of typed content blocks (e.g. [{'type': 'text', 'text': '...'}]).
+    """
+    content = getattr(response, "content", response)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                parts.append(str(item["text"]))
+            elif hasattr(item, "text"):
+                parts.append(str(item.text))
+            elif isinstance(item, str):
+                parts.append(item)
+            else:
+                parts.append(str(item))
+        return "".join(parts)
+    return str(content)
 
 
 def build_llm_client() -> Optional[Any]:
@@ -79,7 +113,7 @@ def _build_gemini_client() -> Optional[Any]:
         )
         return None
 
-    model = os.environ.get("VERITAS_LLM_MODEL", "gemini-1.5-flash")
+    model = os.environ.get("VERITAS_LLM_MODEL", "gemini-3.8-flash")
     temperature = float(os.environ.get("VERITAS_LLM_TEMPERATURE", "0.0"))
 
     try:

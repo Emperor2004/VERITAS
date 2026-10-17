@@ -179,8 +179,10 @@ class AuditQAAgent:
         )
 
         try:
+            from src.agentic.llm_client import extract_text_from_response
+
             response = self.llm_client.invoke(prompt)
-            answer_text = response.content if hasattr(response, "content") else str(response)
+            answer_text = extract_text_from_response(response)
             return answer_text.strip()
         except Exception as exc:
             logger.warning("Agent-6 LLM Q&A failed: %s. Using deterministic fallback.", exc)

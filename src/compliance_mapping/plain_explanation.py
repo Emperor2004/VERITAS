@@ -231,12 +231,15 @@ def _build_control_summary(finding: Dict[str, Any]) -> str:
 
     parts = []
     for c in controls:
-        cid = c.get("control_id", "")
-        title = c.get("title", "")
-        if title:
-            parts.append(f"{cid} ({title})")
-        else:
-            parts.append(cid)
+        if isinstance(c, dict):
+            cid = c.get("control_id", "")
+            title = c.get("title", "")
+            if title:
+                parts.append(f"{cid} ({title})")
+            elif cid:
+                parts.append(cid)
+        elif isinstance(c, str):
+            parts.append(c)
     return "; ".join(parts)
 
 

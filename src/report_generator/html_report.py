@@ -43,7 +43,11 @@ def summarize(findings: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def render_html_report(findings: List[Dict[str, Any]], generated_at: datetime = None) -> str:
+def render_html_report(
+    findings: List[Dict[str, Any]],
+    generated_at: datetime = None,
+    run_metadata: Optional[Dict[str, Any]] = None,
+) -> str:
     generated_at = generated_at or datetime.now(timezone.utc)
     summary = summarize(findings)
     env = Environment(
@@ -54,6 +58,7 @@ def render_html_report(findings: List[Dict[str, Any]], generated_at: datetime = 
     return template.render(
         findings=findings,
         summary=summary,
+        run_metadata=run_metadata or {},
         generated_at=generated_at.strftime("%Y-%m-%d %H:%M UTC"),
     )
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchRun, fetchConfigBounds, approveRun, rejectRun, RunReviewPayload } from '../../../../lib/api';
 import RunStepper from '../../../../components/RunStepper';
 import {
@@ -22,11 +22,17 @@ import {
 export default function ReviewPage() {
   const params = useParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const runId = params.id as string;
 
   const { data: run, isLoading: isRunLoading } = useQuery({
     queryKey: ['run', runId],
     queryFn: () => fetchRun(runId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === 'running') return 1000;
+      return false;
+    },
   });
 
   const { data: bounds } = useQuery({
@@ -58,6 +64,16 @@ export default function ReviewPage() {
     }
   }, [run]);
 
+  // Clean, safe client-side redirection via useEffect instead of during render
+  useEffect(() => {
+    if (!run) return;
+    if (run.status === 'completed') {
+      router.replace(`/runs/${runId}/summary`);
+    } else if (run.status === 'running') {
+      router.replace(`/runs/${runId}`);
+    }
+  }, [run?.status, runId, router]);
+
   if (isRunLoading || !run) {
     return (
       <div className="py-24 flex flex-col items-center justify-center space-y-3">
@@ -67,9 +83,17 @@ export default function ReviewPage() {
     );
   }
 
-  if (run.status === 'completed') {
-    router.replace(`/runs/${runId}/summary`);
-    return null;
+  if (run.status === 'completed' || run.status === 'running') {
+    return (
+      <div className="py-24 flex flex-col items-center justify-center space-y-3">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+        <p className="text-xs font-mono text-ink-soft">
+          {run.status === 'completed'
+            ? 'Audit already approved and completed. Redirecting to executive summary...'
+            : 'Audit approved and actively executing. Redirecting to live monitor...'}
+        </p>
+      </div>
+    );
   }
 
   const review: RunReviewPayload = run.review || {
@@ -91,6 +115,7 @@ export default function ReviewPage() {
   };
 
   const handleApprove = async () => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     setErrorMsg(null);
     try {
@@ -104,15 +129,28 @@ export default function ReviewPage() {
         },
         { email: 'om@optywise.audit', name: reviewerName }
       );
+      await queryClient.invalidateQueries({ queryKey: ['run', runId] });
       router.push(`/runs/${runId}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Approval failed';
+      // If run has already completed or is running, seamlessly navigate to the results
+      if (msg.includes('completed')) {
+        await queryClient.invalidateQueries({ queryKey: ['run', runId] });
+        router.push(`/runs/${runId}/summary`);
+        return;
+      }
+      if (msg.includes('running')) {
+        await queryClient.invalidateQueries({ queryKey: ['run', runId] });
+        router.push(`/runs/${runId}`);
+        return;
+      }
       setErrorMsg(msg);
       setIsSubmitting(false);
     }
   };
 
   const handleReject = async () => {
+    if (isSubmitting) return;
     if (!rejectReason.trim()) {
       setErrorMsg('Please specify a formal justification for rejecting this audit run.');
       return;
@@ -122,6 +160,7 @@ export default function ReviewPage() {
     try {
       await rejectRun(runId, rejectReason);
       setShowRejectModal(false);
+      await queryClient.invalidateQueries({ queryKey: ['run', runId] });
       router.push(`/runs/${runId}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Rejection failed';

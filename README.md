@@ -20,7 +20,8 @@
 | 5. Report Generator | Self-contained HTML report + PDF rendered with ReportLab | ✅ Built & tested |
 | 6. Agentic AI Upgrade | 6 specialized AI agents (Schema inference, Anomaly clustering, Config proposer, Human-in-the-loop LangGraph orchestrator with durable SQLite checkpointer, Explanation rewriter with verifier, Conversational Q&A) | ✅ Built & tested |
 | 7. Full-Stack Web App | High-performance FastAPI backend + Next.js 14 TypeScript frontend with luxury glassmorphism UI, hand-crafted SVG disparity charts, and sandboxed workpaper | ✅ Built & verified |
-| Test Suite | 134 automated unit, integration, and golden equivalence tests passing (100%) | ✅ 134 / 134 Passing |
+| 8. Statistical Validation | Formal verification suite — Type I error control, statistical power, EEOC 4/5ths boundary, small-group stability, Isolation Forest knee-point geometry, and deterministic seed invariance | ✅ Built & tested |
+| Test Suite | 140 automated unit, integration, golden equivalence, and statistical validation tests passing (100%) | ✅ 140 / 140 Passing |
 
 Each phase has a standalone CLI. Phases 1–5 can also run through the subprocess orchestrator with a SHA-256 manifest, through the in-memory `VeritasPipeline` API, or interactively through the full-stack Next.js web application.
 
@@ -33,6 +34,7 @@ Each phase has a standalone CLI. Phases 1–5 can also run through the subproces
 - [3. Architecture](#3-architecture)
 - [3a. Agentic AI Upgrade (6 Agents)](#3a-agentic-ai-upgrade-6-agents)
 - [3b. Full-Stack Web Application](#3b-full-stack-web-application)
+- [3c. Statistical Validation Suite](#3c-statistical-validation-suite)
 - [4. Repository Structure](#4-repository-structure)
 - [5. Tech Stack](#5-tech-stack)
 - [6. Installation](#6-installation)
@@ -155,6 +157,28 @@ The graph is persisted via `SqliteSaver` checkpointing, so interrupted runs can 
 
 ---
 
+## 3c. Statistical Validation Suite
+
+VERITAS includes a **formal statistical validation engine** (`src/statistical_validation.py`) that independently verifies the mathematical correctness of the pipeline's statistical machinery. This is not a functional test — it is a protocol-level verification that the statistical claims made by Phases 2–4 are defensible.
+
+| Protocol | What It Verifies | Method |
+|---|---|---|
+| **Type I Error Control** | Under a true null hypothesis (H₀), the permutation test rejects at most α (5%) of the time | 200 Monte Carlo trials with shuffled labels; observed false-positive rate must be ≤ α + tolerance |
+| **Statistical Power** | Under a true disparity (H₁), the permutation test detects the violation with ≥ 80% power | 200 Monte Carlo trials with manufactured 30-point disparity gap; observed detection rate must be ≥ 0.80 |
+| **EEOC 4/5ths Boundary** | The disparate impact ratio threshold correctly classifies boundary cases | Ratios at 0.79 (violation) and 0.81 (compliant) verified against the 0.80 EEOC threshold |
+| **Small-Group Stability** | Groups with N < 30 are flagged as statistically unstable | Synthetic small groups verified to trigger the instability warning |
+| **Knee-Point Geometry** | Isolation Forest's data-driven contamination selection produces geometrically valid curvature | Curvature at the selected knee must exceed both neighbors; threshold must be in (0, 1) |
+| **Seed Invariance** | Deterministic seeding produces identical results across runs | Two independent pipeline executions with the same seed must yield bit-identical outputs |
+
+The suite also includes a **UCI Adult Income live benchmark** that runs the full pipeline against the real dataset and validates end-to-end output structure.
+
+```bash
+# Run statistical validation tests:
+python -m pytest tests/test_statistical_validation.py -v
+```
+
+---
+
 ## 3b. Full-Stack Web Application
 
 VERITAS ships a production-ready **Next.js 14 + FastAPI** full-stack web application, designed for live executive demonstrations.
@@ -186,8 +210,11 @@ VERITAS ships a production-ready **Next.js 14 + FastAPI** full-stack web applica
 | `/runs/[id]/review` | Pre-flight Approval | Agent-3 config rationale + auditor sign-off (Agent-4 gate) |
 | `/runs/[id]/summary` | Executive Summary | Outlier stats, Agent-2 cluster breakdown |
 | `/runs/[id]/disparity` | Disparity Charts | SVG bar chart with EEOC 0.80 threshold line, per-attribute |
+| `/runs/[id]/anomalies` | Anomaly Findings | Anomaly detection results with z-score explanations |
 | `/runs/[id]/findings` | NIST Table | Paginated findings with Agent-5 plain-English explanations |
+| `/runs/[id]/controls` | Control Mappings | NIST AI RMF control ID assignments with severity badges |
 | `/runs/[id]/qa` | Q&A Chat | Agent-6 conversational assistant with citation chips |
+| `/runs/[id]/report` | Audit Workpaper | Sandboxed HTML Case Dossier with executive summary KPIs, SHA-256 seal, and expandable findings |
 
 ---
 
@@ -224,6 +251,7 @@ veritas/
 │   │   ├── RunStepper.tsx          # Animated audit progress stepper
 │   │   ├── DisparityChart.tsx      # Handcrafted SVG bar chart with 0.80 threshold
 │   │   ├── FindingsTable.tsx       # Paginated NIST table with expandable Agent-5 narratives
+│   │   ├── ReportFrame.tsx         # Sandboxed iframe for Case Dossier HTML workpaper
 │   │   └── SeverityMark.tsx        # Neon severity badges (CRITICAL / HIGH / INFO)
 │   ├── styles/tokens.css           # Design tokens + glassmorphism utilities
 │   ├── tailwind.config.ts          # Tailwind design system config
@@ -247,14 +275,15 @@ veritas/
 │   ├── anomaly_detection/
 │   ├── fairness_scanner/
 │   ├── compliance_mapping/
-│   └── report_generator/
+│   ├── report_generator/
+│   └── statistical_validation.py  # ★ Formal statistical verification (6 protocols)
 │
 ├── config/
 │   └── config.yaml
 ├── data/
 │   ├── demo_audit_dataset.csv      # ★ Pre-built CEO demonstration dataset
 │   └── processed/
-├── tests/                          # 134 tests — see §11
+├── tests/                          # 140 tests — see §11
 ├── outputs/
 └── docs/
 ```
@@ -335,6 +364,7 @@ langchain-core>=0.2
 fastapi>=0.111
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
+python-dotenv>=1.0
 httpx>=0.27
 
 # Testing
@@ -505,7 +535,7 @@ Open **`http://localhost:3000`** in your browser.
 > # Google Gemini (recommended)
 > GOOGLE_API_KEY=AIza...
 > VERITAS_LLM_PROVIDER=gemini
-> VERITAS_LLM_MODEL=gemini-1.5-flash     # optional, this is the default
+> VERITAS_LLM_MODEL=gemini-3.8-flash     # optional, this is the default
 >
 > # --- OR --- Ollama (local, no API key required)
 > VERITAS_LLM_PROVIDER=ollama
@@ -588,7 +618,7 @@ Everything above is verified by `tests/test_compliance_mapping.py` (see §11) ag
 
 ## 11. Testing
 
-**An automated `pytest` suite exists: 134 tests across all modules, 100% passing.**
+**An automated `pytest` suite exists: 140 tests across all modules, 100% passing.**
 
 ```bash
 # Run all tests:
@@ -601,6 +631,7 @@ python -m pytest tests/test_anomaly_detection.py -v
 python -m pytest tests/test_fairness_scanner.py -v
 python -m pytest tests/test_compliance_mapping.py -v
 python -m pytest tests/test_report_generator.py -v
+python -m pytest tests/test_statistical_validation.py -v
 
 # Quiet summary only:
 python -m pytest tests/ -q
@@ -614,6 +645,7 @@ python -m pytest tests/ -q
 | Fairness Scanner | `test_fairness_scanner.py` | EEOC threshold boundaries; small-group and missing-label safeguards; manufactured disparate-impact detection; seeded permutation behavior and fast-path equivalence with Fairlearn for demographic parity and equalized odds; output schema validation |
 | Compliance Mapping | `test_compliance_mapping.py` | Happy-path control mapping for both finding types; informational findings never discarded and never escalate; violation findings correctly escalate to MANAGE 1.3/1.4; anomaly findings never escalate (locks in the informational-only design decision); reconciler filters `is_anomaly=False` records out; reconciler unpacks one fairness row into three independent metric findings with correct per-metric severity; every mapped finding carries non-empty matched NIST action text; fail-loud on an unmapped finding type and on a malformed lookup table |
 | Report Generator | `test_report_generator.py` | Input-key validation; summary counts; rendered severity sections and scope disclosure; zero-violation behavior; end-to-end UTF-8 HTML output; PDF signature/output verification |
+| Statistical Validation | `test_statistical_validation.py` | Type I error control (false-positive rate ≤ α under H₀); statistical power (≥ 80% detection under H₁); EEOC 4/5ths boundary accuracy; small-group stability screening; Isolation Forest knee-point curvature geometry; deterministic seed invariance across runs |
 
 **What this suite does NOT cover, disclosed rather than assumed away:**
 - **No CI wiring.** Tests are currently run locally via pytest, not yet on automated GitHub Actions pull request triggers.
@@ -633,7 +665,7 @@ python -m pytest tests/ -q
 | Phase 2's precision/recall evaluation does not yet break down by anomaly type | **Open.** `ground_truth_anomaly_type` is written by phase 1 and validated by the schema, but `isolation_forest.py`'s evaluation still reports a single aggregate precision/recall against the overall `ground_truth_operational_anomaly` bool. | Wire a per-type breakdown before citing detection performance on any individual pattern (especially `duplicate_record`, which should show near-zero recall and is expected to) |
 | Two threshold-selection methods for IsolationForest contamination can disagree substantially | **Open for interpretation.** The unsupervised knee and supervised grid search can produce very different rates; the pipeline emits a warning, but the discrepancy alone does not establish which threshold is appropriate. | Inspect flagged records and justify the operating threshold before citing detector performance |
 | `config/thresholds.yaml` as a separate file (shown in earlier README drafts and repo trees) | **Resolved — was never actually built.** All configuration, including fairness thresholds, lives in a single `config/config.yaml`. | This README previously misrepresented the repo structure; corrected here |
-| No automated test suite | **Resolved.** 134 tests across all five modules (§11). No CI wiring is currently documented. | Continue running the full suite locally; add CI before relying on automated pull-request checks |
+| No automated test suite | **Resolved.** 140 tests across all modules (§11). No CI wiring is currently documented. | Continue running the full suite locally; add CI before relying on automated pull-request checks |
 | Prior tech-stack framing implied an "optional LLM assist" path alongside "deterministic rules engine" | **Resolved.** Architecture is stated as deterministic-only throughout this document. | If an LLM-assist path is ever reintroduced, this document and the module diagram must be updated together |
 | Phase 4 was designed against an assumed Phase 2/3 output schema before their real source was reviewed | **Resolved, but worth recording as a process lesson.** `AnomalyFinding` has `is_anomaly: bool`, not a `severity_tier`; Phase 2's findings list includes every record, not just flagged ones; `FairnessFinding` is one row per attribute with all three metrics inline, not per-metric records. `input_reconciler.py` was rewritten against the real schemas after reading the actual source. | Any future module built against an "assumed" contract for an already-built upstream module should be verified against real source before being treated as done |
 | Anomaly findings are permanently `informational` — can never trigger a MANAGE-stage response | **Resolved as an explicit design decision, not a gap.** No externally-defensible anomaly-severity cutoff exists (same reasoning as the unbenchmarked injection rate above); manufacturing one to exercise the MANAGE path would repeat that exact problem. Revisit only if an external anomaly-severity standard is identified. | State this as a deliberate scope boundary if asked, not as an oversight |
@@ -656,7 +688,7 @@ python -m pytest tests/ -q
 - [x] Decide and implement a numeric threshold approach for `demographic_parity_difference` and `equalized_odds_difference` — done via permutation significance test
 - [x] Design and build the Compliance Mapping Engine (phase 4) — core logic and CLI entrypoint built
 - [x] Build the explainability trace from threshold gate through to control ID assignment
-- [x] Write an actual `pytest` suite — **134 tests across all modules**, 100% passing
+- [x] Write an actual `pytest` suite — **140 tests across all modules**, 100% passing
 - [x] Build a CLI entrypoint for the Compliance Mapping Engine (`python -m src.compliance_mapping.run_mapping`)
 - [x] Build `src/orchestrator.py` with concurrent execution, SHA-256 manifests, and in-memory execution mode
 - [x] Build modular `VeritasPipeline` in `src/pipeline.py` for programmatic invocation
@@ -668,6 +700,8 @@ python -m pytest tests/ -q
 - [ ] Consider an end-to-end test approximating MEASURE 2.13 (TEVV process effectiveness) — confirm the pipeline detects a known-bad classifier and does not false-positive on a known-fair one, beyond the current unit-level permutation-test coverage
 - [x] **Phase 6 — Agentic AI Upgrade:** 6 LangGraph agents (Schema Inference, Anomaly Grouper, Config Proposer, Human-in-the-Loop Approval Gate, Explanation Rewriter + Verifier, Q&A Assistant) with durable SqliteSaver checkpointing — built and tested
 - [x] **Phase 7 — Full-Stack Web Application:** FastAPI backend + Next.js 14 TypeScript frontend with luxury glassmorphism UI, hand-crafted SVG disparity charts, pre-flight governance review screen, and Agent-6 conversational assistant — built and verified
+- [x] **Phase 8 — Statistical Validation:** Formal verification suite covering Type I error control, statistical power, EEOC boundary accuracy, small-group stability, knee-point geometry, and seed invariance — built and tested
+- [x] **Audit Workpaper Case Dossier:** Dynamic HTML report with run metadata injection, executive summary KPIs, SHA-256 config fingerprint, and sandboxed iframe viewer — built and verified
 - [x] **CEO Demonstration Guide:** end-to-end demonstration script with sample dataset, act-by-act walkthrough, and answers to tough executive questions — written and ready
 
 ---

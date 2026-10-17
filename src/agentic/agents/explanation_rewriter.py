@@ -62,8 +62,10 @@ def rewrite_explanation(
     )
 
     try:
+        from src.agentic.llm_client import extract_text_from_response
+
         response = llm_client.invoke(prompt)
-        text = response.content if hasattr(response, "content") else str(response)
+        text = extract_text_from_response(response)
         json_match = re.search(r"\{.*\}", text, re.DOTALL)
         if not json_match:
             logger.info("Agent-5 rewrite did not return valid JSON; using deterministic draft.")

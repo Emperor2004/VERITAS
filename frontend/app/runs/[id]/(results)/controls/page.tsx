@@ -16,7 +16,7 @@ export default function ControlsPage() {
     queryFn: () => fetchFindings(runId),
   });
 
-  const findings = data?.items || [];
+  const findings = Array.isArray(data) ? data : (data?.items || []);
 
   return (
     <div className="space-y-6">

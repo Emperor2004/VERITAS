@@ -42,15 +42,16 @@ export default function ResultsLayout({ children }: { children: React.ReactNode 
     );
   }
 
-  const summary = run.summary || {
+  const rawSummary = run.summary as Record<string, any> | undefined;
+  const summary = {
     run_id: runId,
-    timestamp: run.created_at || new Date().toISOString(),
-    total_records: 0,
-    anomalies_detected: 0,
-    fairness_violations: 0,
-    nist_violations: 0,
-    nist_informational: 0,
-    status: 'completed',
+    timestamp: rawSummary?.timestamp || run.created_at || new Date().toISOString(),
+    total_records: Number(rawSummary?.total_records ?? run.row_count ?? 0),
+    anomalies_detected: Number(rawSummary?.anomalies_detected ?? rawSummary?.anomaly_total ?? 0),
+    fairness_violations: Number(rawSummary?.fairness_violations ?? 0),
+    nist_violations: Number(rawSummary?.nist_violations ?? rawSummary?.mapped_violation_count ?? 0),
+    nist_informational: Number(rawSummary?.nist_informational ?? rawSummary?.mapped_informational_count ?? 0),
+    status: run.status || 'completed',
   };
 
   const tabs = [
@@ -117,15 +118,15 @@ export default function ResultsLayout({ children }: { children: React.ReactNode 
           <div className="p-4 rounded-xl glass-card space-y-1">
             <span className="text-[11px] font-mono uppercase text-ink-soft font-semibold">Total Audited Records</span>
             <div className="text-2xl font-extrabold font-mono text-white tracking-tight">
-              {summary.total_records.toLocaleString()}
+              {(summary.total_records ?? 0).toLocaleString()}
             </div>
           </div>
 
           <div className="p-4 rounded-xl glass-card space-y-1">
             <span className="text-[11px] font-mono uppercase text-ink-soft font-semibold">Anomalies Detected</span>
             <div className="text-2xl font-extrabold font-mono text-amber-400 tracking-tight flex items-center space-x-2">
-              <span>{summary.anomalies_detected}</span>
-              {summary.anomalies_detected > 0 && (
+              <span>{summary.anomalies_detected ?? 0}</span>
+              {(summary.anomalies_detected ?? 0) > 0 && (
                 <span className="text-[10px] font-sans font-bold px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300">
                   Outliers
                 </span>
@@ -136,16 +137,16 @@ export default function ResultsLayout({ children }: { children: React.ReactNode 
           <div className="p-4 rounded-xl glass-card space-y-1">
             <span className="text-[11px] font-mono uppercase text-ink-soft font-semibold">Fairness Violations</span>
             <div className="text-2xl font-extrabold font-mono text-rose-400 tracking-tight">
-              {summary.fairness_violations}
+              {summary.fairness_violations ?? 0}
             </div>
           </div>
 
           <div className="p-4 rounded-xl glass-card space-y-1">
             <span className="text-[11px] font-mono uppercase text-ink-soft font-semibold">NIST Mapped Controls</span>
             <div className="text-2xl font-extrabold font-mono text-white tracking-tight flex items-baseline space-x-2">
-              <span className="text-rose-400">{summary.nist_violations}</span>
+              <span className="text-rose-400">{summary.nist_violations ?? 0}</span>
               <span className="text-xs text-ink-soft font-normal font-sans">violations</span>
-              <span className="text-indigo-400 text-sm font-normal">/ {summary.nist_informational} info</span>
+              <span className="text-indigo-400 text-sm font-normal">/ {summary.nist_informational ?? 0} info</span>
             </div>
           </div>
         </div>
